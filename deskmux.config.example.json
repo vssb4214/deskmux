@@ -1,0 +1,47 @@
+{
+  "deviceName": "windows-pc",
+  "peers": [
+    { "name": "mac-mini", "host": "192.168.1.50", "port": 3737 },
+    { "name": "linux-box", "host": "192.168.1.51", "port": 3737 }
+  ],
+  "devices": [
+    { "id": "windows-pc", "label": "Windows PC" },
+    { "id": "mac-mini", "label": "Mac mini" },
+    { "id": "linux-box", "label": "Linux Box" }
+  ],
+  "monitors": [
+    {
+      "id": "monitor1",
+      "label": "Left Monitor",
+      "order": 0,
+      "inputs": {
+        "windows-pc": { "type": "displayport", "command": "PLACEHOLDER_DDC_MONITOR1_WINDOWS" },
+        "mac-mini":   { "type": "hdmi",        "command": "PLACEHOLDER_DDC_MONITOR1_MAC" },
+        "linux-box":  { "type": "usb-c",       "command": "PLACEHOLDER_DDC_MONITOR1_LINUX" }
+      }
+    },
+    {
+      "id": "monitor2",
+      "label": "Center Monitor",
+      "order": 1,
+      "inputs": {
+        "windows-pc": { "type": "displayport", "command": "PLACEHOLDER_DDC_MONITOR2_WINDOWS" },
+        "mac-mini":   { "type": "hdmi",        "command": "PLACEHOLDER_DDC_MONITOR2_MAC" }
+      }
+    }
+  ],
+  "presets": {
+    "all_windows": {
+      "label": "All Windows",
+      "layout": { "monitor1": "windows-pc", "monitor2": "windows-pc" }
+    },
+    "all_mac": {
+      "label": "All Mac",
+      "layout": { "monitor1": "mac-mini", "monitor2": "mac-mini" }
+    },
+    "split_win_mac": {
+      "label": "Left Windows / Center Mac",
+      "layout": { "monitor1": "windows-pc", "monitor2": "mac-mini" }
+    }
+  }
+}
