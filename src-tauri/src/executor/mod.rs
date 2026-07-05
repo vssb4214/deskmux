@@ -1,16 +1,43 @@
 mod backend;
 mod model;
+mod native;
 mod resolve;
 mod runner;
+#[cfg(target_os = "windows")]
+mod windows_ddc;
 
-use backend::{Backend, ShellBackend};
+use std::io;
+
+use backend::{Backend, BackendAction, ShellBackend};
+use native::NativeDdcBackend;
+#[cfg(target_os = "windows")]
+use native::NativeDdcController;
 use resolve::{preset_layout_entries, resolve_layout_entries, ResolvedEntry};
-use runner::ShellCommandRunner;
+use runner::{CommandOutput, CommandRunner, ShellCommandRunner};
+#[cfg(target_os = "windows")]
+use windows_ddc::WindowsDdcController;
 
 pub use model::{ExecutorError, MonitorOutcome, MonitorResult, ResolutionError};
 pub use resolve::LayoutEntry;
 
 use crate::config::Config;
+
+/// Lists detected native-DDC displays by their `displayId`, for discoverability — copy the
+/// value you want into `monitors[].nativeDdc.displayId` in your config. Empty on non-Windows
+/// builds or if enumeration fails; this is best-effort diagnostics, not a hard dependency.
+pub fn list_native_display_ids() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        WindowsDdcController
+            .list_displays()
+            .map(|displays| displays.into_iter().map(|d| d.display_id).collect())
+            .unwrap_or_default()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
 
 /// Resolves `preset_name`'s layout against `config` and runs each monitor's command
 /// sequentially. When `dry_run` is true, commands are resolved and returned but never spawned.
@@ -28,7 +55,7 @@ pub fn apply_preset(
         preset_name,
         dry_run,
         NATIVE_DDC_AVAILABLE,
-        &ShellBackend::new(&shell),
+        &DefaultBackend::new(&shell),
     )
 }
 
@@ -45,15 +72,53 @@ pub fn apply_layout_entries(
         entries,
         dry_run,
         NATIVE_DDC_AVAILABLE,
-        &ShellBackend::new(&shell),
+        &DefaultBackend::new(&shell),
     )
 }
 
-/// Whether this build can execute `BackendAction::NativeDdc` at all. Hard-coded `false` for
-/// now — `ShellBackend` (the only backend `apply_preset`/`apply_layout_entries` construct so
-/// far) has nothing to run it with. Flips to `cfg!(target_os = "windows")` once a real native
-/// backend is wired in alongside it.
-const NATIVE_DDC_AVAILABLE: bool = false;
+/// Whether this build can execute `BackendAction::NativeDdc` at all.
+const NATIVE_DDC_AVAILABLE: bool = cfg!(target_os = "windows");
+
+/// Dispatches each `BackendAction` to the backend that can run it: shell always, native DDC
+/// only on Windows (where `windows_ddc` is compiled in at all). Both backends share the same
+/// injected `CommandRunner` seam for shell commands; native DDC has its own seam
+/// (`native::NativeDdcController`).
+struct DefaultBackend<'a> {
+    shell: ShellBackend<'a>,
+    #[cfg(target_os = "windows")]
+    native: NativeDdcBackend<WindowsDdcController>,
+}
+
+impl<'a> DefaultBackend<'a> {
+    fn new(runner: &'a dyn CommandRunner) -> Self {
+        Self {
+            shell: ShellBackend::new(runner),
+            #[cfg(target_os = "windows")]
+            native: NativeDdcBackend::new(WindowsDdcController),
+        }
+    }
+}
+
+impl Backend for DefaultBackend<'_> {
+    fn execute(&self, action: &BackendAction) -> io::Result<CommandOutput> {
+        match action {
+            BackendAction::Shell(_) => self.shell.execute(action),
+            BackendAction::NativeDdc { .. } => {
+                #[cfg(target_os = "windows")]
+                {
+                    self.native.execute(action)
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "native DDC control is not available on this platform",
+                    ))
+                }
+            }
+        }
+    }
+}
 
 fn apply_preset_with_backend(
     config: &Config,
@@ -249,6 +314,54 @@ mod tests {
             }
         }"#;
         serde_json::from_str(json).expect("fixture config should parse")
+    }
+
+    fn native_fixture_config() -> Config {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [
+                { "id": "device-a", "label": "Device A" }
+            ],
+            "monitors": [
+                {
+                    "id": "monitor1",
+                    "label": "Monitor 1",
+                    "order": 0,
+                    "nativeDdc": { "displayId": "DEL4176:0" },
+                    "inputs": {
+                        "device-a": {
+                            "type": "displayport",
+                            "nativeDdc": { "inputSourceValue": 15 }
+                        }
+                    }
+                }
+            ],
+            "presets": {
+                "native_preset": {
+                    "label": "Native",
+                    "layout": { "monitor1": "device-a" }
+                }
+            }
+        }"#;
+        serde_json::from_str(json).expect("fixture config should parse")
+    }
+
+    /// End-to-end through the real public API (no mock): a NativeDdc action against a
+    /// displayId that doesn't exist on this machine must fail cleanly, never panic, on any
+    /// platform — Windows resolves it as "display not found"; elsewhere DefaultBackend itself
+    /// reports "not available on this platform". Either way, no crash and no silent success.
+    #[test]
+    fn native_ddc_preset_through_public_api_never_panics() {
+        let config = native_fixture_config();
+
+        let results = apply_preset(&config, "native_preset", false).expect("preset should resolve");
+
+        assert_eq!(results.len(), 1);
+        assert!(!matches!(
+            results[0].outcome,
+            MonitorOutcome::Success { .. }
+        ));
     }
 
     #[test]

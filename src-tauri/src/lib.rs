@@ -38,6 +38,19 @@ pub fn run() {
                     eprintln!("deskmux: failed to load deskmux.config.json\n{err}");
                 }
             }
+
+            #[cfg(target_os = "windows")]
+            {
+                let displays = executor::list_native_display_ids();
+                if displays.is_empty() {
+                    println!("deskmux: no native DDC displays detected");
+                } else {
+                    println!(
+                        "deskmux: detected native DDC displays (copy into monitors[].nativeDdc.displayId): {}",
+                        displays.join(", ")
+                    );
+                }
+            }
             let app_state = Arc::new(AppState::from_load_result(config_result));
             let api_base_url = api_base_url_from_config(app_state.config.as_ref());
             app.manage(BootstrapState { api_base_url });
