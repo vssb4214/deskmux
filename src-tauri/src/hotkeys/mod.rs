@@ -61,6 +61,76 @@ fn normalize_shortcut(shortcut: &str) -> String {
         .join("+")
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn register(
+    app: &tauri::AppHandle,
+    state: std::sync::Arc<crate::api::AppState>,
+) -> Result<(), String> {
+    use std::str::FromStr;
+
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    use crate::api::{apply_preset_to_arc, ApplyPresetStateError};
+
+    let Some(config) = state.config.as_ref() else {
+        return Ok(());
+    };
+
+    if config.hotkeys.is_empty() {
+        return Ok(());
+    }
+
+    for (preset_name, shortcut_str) in &config.hotkeys {
+        let shortcut = match Shortcut::from_str(shortcut_str) {
+            Ok(shortcut) => shortcut,
+            Err(err) => {
+                eprintln!(
+                    "deskmux: skipping hotkey '{shortcut_str}' for preset '{preset_name}': {err}"
+                );
+                continue;
+            }
+        };
+
+        let preset = preset_name.clone();
+        let state = state.clone();
+        if let Err(err) =
+            app.global_shortcut()
+                .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
+                    }
+
+                    let state = state.clone();
+                    let preset = preset.clone();
+                    tauri::async_runtime::spawn(async move {
+                        match apply_preset_to_arc(state, &preset, false, false).await {
+                            Ok(result) if result.is_full_success() => {}
+                            Ok(_) => {
+                                eprintln!("deskmux: hotkey preset '{preset}' applied with errors");
+                            }
+                            Err(ApplyPresetStateError::ConfigNotLoaded) => {
+                                eprintln!(
+                                    "deskmux: hotkey preset '{preset}' failed: config not loaded"
+                                );
+                            }
+                            Err(ApplyPresetStateError::PresetNotFound { preset_name }) => {
+                                eprintln!(
+                            "deskmux: hotkey preset '{preset_name}' failed: preset not found"
+                        );
+                            }
+                        }
+                    });
+                })
+        {
+            eprintln!(
+                "deskmux: failed to register hotkey '{shortcut_str}' for preset '{preset_name}': {err}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

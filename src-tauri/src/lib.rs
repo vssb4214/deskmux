@@ -21,8 +21,14 @@ use api::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![commands::get_api_base_url])
         .setup(|app| {
             let config_result = config::load_config(std::path::Path::new("deskmux.config.json"));
@@ -37,7 +43,12 @@ pub fn run() {
             app.manage(BootstrapState { api_base_url });
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            tray::init(app.handle(), app_state.clone())?;
+            {
+                tray::init(app.handle(), app_state.clone())?;
+                if let Err(err) = hotkeys::register(app.handle(), app_state.clone()) {
+                    eprintln!("deskmux: global hotkey setup failed: {err}");
+                }
+            }
 
             api::spawn_server(app_state);
             Ok(())
