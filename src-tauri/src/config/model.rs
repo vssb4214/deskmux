@@ -96,8 +96,8 @@ pub struct InputNativeDdc {
     /// The VCP input-source (code 0x60) value that selects this device's input on this
     /// monitor. Read it off the monitor, same as shell command values — DeskMux doesn't guess.
     /// Input-source is the only capability this exposes for now; there is deliberately no raw
-    /// VCP code field here.
-    pub input_source_value: u8,
+    /// VCP code field here. Values are monitor-specific and often exceed 255 on real hardware.
+    pub input_source_value: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
