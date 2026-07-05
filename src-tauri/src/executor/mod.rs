@@ -2,10 +2,11 @@ mod model;
 mod resolve;
 mod runner;
 
-use resolve::{resolve_preset, ResolvedEntry};
+use resolve::{preset_layout_entries, resolve_layout_entries, ResolvedEntry};
 use runner::{CommandRunner, ShellCommandRunner};
 
 pub use model::{ExecutorError, MonitorOutcome, MonitorResult, ResolutionError};
+pub use resolve::LayoutEntry;
 
 use crate::config::Config;
 
@@ -22,20 +23,38 @@ pub fn apply_preset(
     apply_preset_with_runner(config, preset_name, dry_run, &ShellCommandRunner)
 }
 
+/// Resolves and runs only the supplied layout entries. Resolution failures are returned
+/// per entry; the caller chooses which entries to include (filter before calling).
+pub fn apply_layout_entries(
+    config: &Config,
+    entries: &[LayoutEntry],
+    dry_run: bool,
+) -> Vec<MonitorResult> {
+    apply_layout_entries_with_runner(config, entries, dry_run, &ShellCommandRunner)
+}
+
 fn apply_preset_with_runner(
     config: &Config,
     preset_name: &str,
     dry_run: bool,
     runner: &dyn CommandRunner,
 ) -> Result<Vec<MonitorResult>, ExecutorError> {
-    let entries = resolve_preset(config, preset_name)?;
+    let entries = preset_layout_entries(config, preset_name)?;
+    Ok(apply_layout_entries_with_runner(
+        config, &entries, dry_run, runner,
+    ))
+}
 
-    let results = entries
+fn apply_layout_entries_with_runner(
+    config: &Config,
+    entries: &[LayoutEntry],
+    dry_run: bool,
+    runner: &dyn CommandRunner,
+) -> Vec<MonitorResult> {
+    resolve_layout_entries(config, entries)
         .into_iter()
         .map(|entry| run_entry(entry, dry_run, runner))
-        .collect();
-
-    Ok(results)
+        .collect()
 }
 
 fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) -> MonitorResult {
@@ -199,6 +218,19 @@ mod tests {
             }
         }"#;
         serde_json::from_str(json).expect("fixture config should parse")
+    }
+
+    #[test]
+    fn apply_layout_entries_only_runs_filtered_monitors() {
+        let config = fixture_config();
+        let mock = MockCommandRunner::new(vec![success("ok")]);
+        let entries = vec![("monitor1".to_string(), "device-a".to_string())];
+
+        let results = apply_layout_entries_with_runner(&config, &entries, false, &mock);
+
+        assert_eq!(mock.call_count(), 1);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].monitor_id, "monitor1");
     }
 
     #[test]

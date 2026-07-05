@@ -296,9 +296,11 @@ mod tests {
 
         let errors = validate(&config).unwrap_err();
 
-        assert!(errors.0.contains(&ConfigError::LocallyOwnedMonitorMissingInputs {
-            monitor_id: "monitor1".to_string(),
-        }));
+        assert!(errors
+            .0
+            .contains(&ConfigError::LocallyOwnedMonitorMissingInputs {
+                monitor_id: "monitor1".to_string(),
+            }));
     }
 
     #[test]
