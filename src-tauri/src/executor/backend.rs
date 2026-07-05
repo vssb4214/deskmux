@@ -2,20 +2,31 @@ use std::io;
 
 use super::runner::{CommandOutput, CommandRunner};
 
-/// What a resolved layout entry should do to switch an input. Only one variant exists today,
-/// because `Input` only ever describes a shell command — this is the seam a Phase 2 native DDC
-/// action will slot into once an approach is chosen (see docs/ROADMAP.md).
-#[derive(Debug, PartialEq)]
+/// What a resolved layout entry should do to switch an input.
+#[derive(Debug, Clone, PartialEq)]
 pub(super) enum BackendAction {
     Shell(String),
+    /// Write `value` to VCP feature `vcp_code` on the display identified by `display_id`.
+    /// Generically VCP-shaped at this layer since the underlying call is the same for any VCP
+    /// code — but the *config* schema only ever produces `vcp_code: 0x60` (input-source) today;
+    /// see `InputNativeDdc` in config/model.rs for that boundary.
+    NativeDdc {
+        display_id: String,
+        vcp_code: u8,
+        value: u16,
+    },
 }
 
 impl BackendAction {
-    /// Human-readable form for `MonitorResult.command`. Today this is always the raw shell
-    /// command string; a future native action would synthesize a description here instead.
+    /// Human-readable form for `MonitorResult.command`.
     pub(super) fn display_command(&self) -> String {
         match self {
             BackendAction::Shell(command) => command.clone(),
+            BackendAction::NativeDdc {
+                display_id,
+                vcp_code,
+                value,
+            } => format!("native DDC: display '{display_id}' VCP 0x{vcp_code:02x} = {value}"),
         }
     }
 }
@@ -43,6 +54,13 @@ impl Backend for ShellBackend<'_> {
     fn execute(&self, action: &BackendAction) -> io::Result<CommandOutput> {
         match action {
             BackendAction::Shell(command) => self.runner.run(command),
+            // Resolution should never hand a NativeDdc action to the shell backend — routing
+            // to the right backend per action is DefaultBackend's job (see mod.rs). Fail
+            // clearly rather than silently misbehaving if that invariant is ever violated.
+            BackendAction::NativeDdc { .. } => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ShellBackend received a NativeDdc action",
+            )),
         }
     }
 }

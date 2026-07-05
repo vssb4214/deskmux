@@ -23,7 +23,13 @@ pub fn apply_preset(
     dry_run: bool,
 ) -> Result<Vec<MonitorResult>, ExecutorError> {
     let shell = ShellCommandRunner;
-    apply_preset_with_backend(config, preset_name, dry_run, &ShellBackend::new(&shell))
+    apply_preset_with_backend(
+        config,
+        preset_name,
+        dry_run,
+        NATIVE_DDC_AVAILABLE,
+        &ShellBackend::new(&shell),
+    )
 }
 
 /// Resolves and runs only the supplied layout entries. Resolution failures are returned
@@ -34,18 +40,35 @@ pub fn apply_layout_entries(
     dry_run: bool,
 ) -> Vec<MonitorResult> {
     let shell = ShellCommandRunner;
-    apply_layout_entries_with_backend(config, entries, dry_run, &ShellBackend::new(&shell))
+    apply_layout_entries_with_backend(
+        config,
+        entries,
+        dry_run,
+        NATIVE_DDC_AVAILABLE,
+        &ShellBackend::new(&shell),
+    )
 }
+
+/// Whether this build can execute `BackendAction::NativeDdc` at all. Hard-coded `false` for
+/// now — `ShellBackend` (the only backend `apply_preset`/`apply_layout_entries` construct so
+/// far) has nothing to run it with. Flips to `cfg!(target_os = "windows")` once a real native
+/// backend is wired in alongside it.
+const NATIVE_DDC_AVAILABLE: bool = false;
 
 fn apply_preset_with_backend(
     config: &Config,
     preset_name: &str,
     dry_run: bool,
+    native_available: bool,
     backend: &dyn Backend,
 ) -> Result<Vec<MonitorResult>, ExecutorError> {
     let entries = preset_layout_entries(config, preset_name)?;
     Ok(apply_layout_entries_with_backend(
-        config, &entries, dry_run, backend,
+        config,
+        &entries,
+        dry_run,
+        native_available,
+        backend,
     ))
 }
 
@@ -53,9 +76,10 @@ fn apply_layout_entries_with_backend(
     config: &Config,
     entries: &[LayoutEntry],
     dry_run: bool,
+    native_available: bool,
     backend: &dyn Backend,
 ) -> Vec<MonitorResult> {
-    resolve_layout_entries(config, entries)
+    resolve_layout_entries(config, entries, native_available)
         .into_iter()
         .map(|entry| run_entry(entry, dry_run, backend))
         .collect()
@@ -233,7 +257,7 @@ mod tests {
         let mock = MockBackend::new(vec![success("ok")]);
         let entries = vec![("monitor1".to_string(), "device-a".to_string())];
 
-        let results = apply_layout_entries_with_backend(&config, &entries, false, &mock);
+        let results = apply_layout_entries_with_backend(&config, &entries, false, false, &mock);
 
         assert_eq!(mock.call_count(), 1);
         assert_eq!(results.len(), 1);
@@ -245,7 +269,7 @@ mod tests {
         let config = fixture_config();
         let mock = MockBackend::new(vec![]);
 
-        let results = apply_preset_with_backend(&config, "valid_preset", true, &mock)
+        let results = apply_preset_with_backend(&config, "valid_preset", true, false, &mock)
             .expect("should resolve");
 
         assert_eq!(mock.call_count(), 0);
@@ -259,7 +283,7 @@ mod tests {
         let config = fixture_config();
         let mock = MockBackend::new(vec![]);
 
-        let results = apply_preset_with_backend(&config, "valid_preset", true, &mock)
+        let results = apply_preset_with_backend(&config, "valid_preset", true, false, &mock)
             .expect("should resolve");
 
         assert_eq!(
@@ -279,7 +303,7 @@ mod tests {
         let config = fixture_config();
         let mock = MockBackend::new(vec![]);
 
-        let result = apply_preset_with_backend(&config, "does-not-exist", false, &mock);
+        let result = apply_preset_with_backend(&config, "does-not-exist", false, false, &mock);
 
         assert_eq!(
             result.unwrap_err(),
@@ -294,8 +318,9 @@ mod tests {
         let config = fixture_config();
         let mock = MockBackend::new(vec![]);
 
-        let results = apply_preset_with_backend(&config, "unknown_monitor_preset", false, &mock)
-            .expect("resolution failures are reported per-entry, not a top-level error");
+        let results =
+            apply_preset_with_backend(&config, "unknown_monitor_preset", false, false, &mock)
+                .expect("resolution failures are reported per-entry, not a top-level error");
 
         assert_eq!(mock.call_count(), 0);
         assert_eq!(
@@ -319,7 +344,7 @@ mod tests {
         let config = fixture_config();
         let mock = MockBackend::new(vec![success("ok"), failure(1, "nope")]);
 
-        let results = apply_preset_with_backend(&config, "mixed_preset", false, &mock)
+        let results = apply_preset_with_backend(&config, "mixed_preset", false, false, &mock)
             .expect("should resolve");
 
         assert_eq!(mock.call_count(), 2);
