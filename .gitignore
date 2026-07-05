@@ -4,15 +4,19 @@ deskmux.config.json
 # Node
 node_modules/
 dist/
+dist-ssr/
+*.local
 *.log
 npm-debug.log*
 
 # Tauri / Rust
 src-tauri/target/
+src-tauri/gen/schemas/
 **/*.rs.bk
 
 # Editors / OS
 .DS_Store
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
 Thumbs.db
