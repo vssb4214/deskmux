@@ -48,7 +48,7 @@ mod tests {
                     "label": "Monitor 1",
                     "order": 0,
                     "inputs": {
-                        "device-a": { "type": "hdmi", "command": "secret-cmd-a" }
+                        "device-a": { "type": "hdmi", "command": "exit 0" }
                     }
                 }
             ],
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(json["presets"][0]["name"], "all_a");
         assert_eq!(json["monitors"][0]["id"], "monitor1");
         assert!(json.get("lastAppliedPreset").is_some());
-        assert!(!json.to_string().contains("secret-cmd-a"));
+        assert!(!json.to_string().contains("exit 0"));
         assert!(json.get("command").is_none());
         assert!(json.get("inputs").is_none());
     }
@@ -134,7 +134,9 @@ mod tests {
             post_json(&app, "/apply-preset", r#"{"preset":"all_a","dryRun":true}"#).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["dryRun"], true);
-        assert_eq!(json["results"][0]["outcome"]["type"], "dryRun");
+        assert_eq!(json["localResults"][0]["outcome"]["type"], "dryRun");
+        assert!(json["planningErrors"].as_array().unwrap().is_empty());
+        assert!(json["peerResults"].as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -167,13 +169,34 @@ mod tests {
         let (_, apply_json) = post_json(
             &app,
             "/apply-preset",
-            r#"{"preset":"all_a","dryRun":false}"#,
+            r#"{"preset":"all_a","dryRun":false,"localOnly":true}"#,
         )
         .await;
         assert_eq!(apply_json["dryRun"], false);
+        assert_eq!(apply_json["localResults"][0]["outcome"]["type"], "success");
 
         let (_, status_json) = get(&app, "/status").await;
         assert_eq!(status_json["lastAppliedPreset"], "all_a");
+    }
+
+    #[tokio::test]
+    async fn apply_preset_failure_does_not_update_last_applied_preset() {
+        let mut config = test_config();
+        config.monitors[0]
+            .inputs
+            .get_mut("device-a")
+            .unwrap()
+            .command = "exit 1".to_string();
+        let app = router(AppState::new(Some(config)));
+        post_json(
+            &app,
+            "/apply-preset",
+            r#"{"preset":"all_a","dryRun":false,"localOnly":true}"#,
+        )
+        .await;
+
+        let (_, status_json) = get(&app, "/status").await;
+        assert!(status_json["lastAppliedPreset"].is_null());
     }
 
     #[tokio::test]

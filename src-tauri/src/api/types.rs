@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::executor::MonitorResult;
+pub use crate::orchestrator::{PeerApplyOutcome, PlanningError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +40,9 @@ pub struct ApplyPresetRequest {
     pub preset: String,
     #[serde(default)]
     pub dry_run: bool,
+    /// When true, only run monitors owned by this machine — no peer fan-out.
+    #[serde(default)]
+    pub local_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +50,10 @@ pub struct ApplyPresetRequest {
 pub struct ApplyPresetResponse {
     pub preset: String,
     pub dry_run: bool,
-    pub results: Vec<MonitorResult>,
+    pub local_only: bool,
+    pub planning_errors: Vec<PlanningError>,
+    pub local_results: Vec<MonitorResult>,
+    pub peer_results: Vec<PeerApplyOutcome>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

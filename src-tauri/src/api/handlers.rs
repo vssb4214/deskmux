@@ -7,7 +7,8 @@ use axum::{
 };
 
 use crate::config::Config;
-use crate::executor::{apply_preset, ExecutorError};
+use crate::executor::ExecutorError;
+use crate::orchestrator::{apply_preset, PeerClientAdapter};
 
 use super::types::{
     ApplyPresetRequest, ApplyPresetResponse, ErrorResponse, HealthResponse, MonitorSummary,
@@ -93,18 +94,30 @@ pub async fn apply_preset_handler(
         .as_ref()
         .ok_or(service_unavailable("config not loaded"))?;
 
-    match apply_preset(config, &body.preset, body.dry_run) {
-        Ok(results) => {
-            if !body.dry_run {
+    let peer_client = PeerClientAdapter;
+    match apply_preset(
+        config,
+        &body.preset,
+        body.dry_run,
+        body.local_only,
+        &peer_client,
+    )
+    .await
+    {
+        Ok(result) => {
+            if !body.dry_run && result.is_full_success() {
                 *state
                     .last_applied_preset
                     .lock()
                     .expect("last_applied_preset lock poisoned") = Some(body.preset.clone());
             }
             Ok(Json(ApplyPresetResponse {
-                preset: body.preset,
-                dry_run: body.dry_run,
-                results,
+                preset: result.preset,
+                dry_run: result.dry_run,
+                local_only: result.local_only,
+                planning_errors: result.planning_errors,
+                local_results: result.local_results,
+                peer_results: result.peer_results,
             }))
         }
         Err(ExecutorError::PresetNotFound { preset_name }) => {
