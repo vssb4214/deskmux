@@ -41,6 +41,7 @@ Phase 2 replaces the *requirement* for external monitor tools on supported displ
   - Surface supported input-source values where the monitor exposes them via DDC.
   - Retry/refresh strategy for intermittent `GetVCPFeatureAndVCPFeatureReply` failures — possible stale physical-monitor handles after hotplug.
   - Onboarding flow so users can discover `displayId` and `inputSourceValue` without a separate diagnostic session.
+  - Technical design: [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)
 - [ ] Peer auto-discovery on the LAN (mDNS/similar), so peers don't have to be hand-configured with IPs
 
 ## Phase 3 — Keyboard, mouse, and smart handoff
