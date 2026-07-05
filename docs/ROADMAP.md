@@ -25,7 +25,8 @@ Phase 1 uses external monitor-control tools (ControlMyMonitor, ddcutil, BetterDi
 
 Phase 2 replaces the *requirement* for external monitor tools on supported displays. Nothing here is implemented yet.
 
-- [ ] **Native DDC/CI monitor control built into DeskMux.** Talk to monitors directly from Rust (e.g. the `ddc` / `ddc-hi` crates) so supported monitors no longer need ControlMyMonitor, ddcutil, BetterDisplay, or Lunar installed.
+- [ ] **Native DDC/CI monitor control built into DeskMux.** Talk to monitors directly from Rust so supported monitors no longer need ControlMyMonitor, ddcutil, BetterDisplay, or Lunar installed.
+  - **Crate choice (checked 2026-07):** prefer calling `windows-rs` (`windows::Win32::Devices::Display` — `GetPhysicalMonitorsFromHMONITOR`, `GetVCPFeatureAndVCPFeatureReply`, `SetVCPFeature`) directly rather than adding `ddc-hi`/`ddc-winapi`. `windows` is already a transitive dependency via Tauri and is actively maintained; `ddc-hi` (last published 2021) and `ddc-winapi` (still alpha as of mid-2024) are stale for the platform we'd ship first. Re-check freshness before implementing, but don't default back to the `ddc` family without a reason.
   - Keep the shell-command backend as an **optional fallback / escape hatch** for quirky displays (Apple Silicon HDMI ports that are DDC-blind, some LG panels, laptop panels, etc.).
 - [ ] **Monitor controls beyond input switching** — for monitors that expose the relevant VCP codes:
   - input source (already the Phase 1 focus)
