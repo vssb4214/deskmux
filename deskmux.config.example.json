@@ -30,6 +30,12 @@
         "windows-pc": { "type": "displayport", "command": "PLACEHOLDER_DDC_MONITOR2_WINDOWS" },
         "mac-mini":   { "type": "hdmi",        "command": "PLACEHOLDER_DDC_MONITOR2_MAC" }
       }
+    },
+    {
+      "id": "monitor3",
+      "label": "Mac-side Monitor",
+      "order": 2,
+      "controlledBy": "mac-mini"
     }
   ],
   "presets": {
@@ -44,6 +50,10 @@
     "split_win_mac": {
       "label": "Left Windows / Center Mac",
       "layout": { "monitor1": "windows-pc", "monitor2": "mac-mini" }
+    },
+    "mac_side": {
+      "label": "Mac-side monitor only",
+      "layout": { "monitor3": "mac-mini" }
     }
   }
 }
