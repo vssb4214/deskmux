@@ -20,3 +20,7 @@ src-tauri/gen/schemas/
 !.vscode/extensions.json
 .idea/
 Thumbs.db
+
+# Local AI-assistant tool state (per-machine, not project config)
+.cursor/
+.claude/
