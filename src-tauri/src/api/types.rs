@@ -8,6 +8,8 @@ pub use crate::orchestrator::{PeerApplyOutcome, PlanningError};
 pub struct HealthResponse {
     pub status: String,
     pub config_loaded: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +59,9 @@ pub struct ApplyPresetResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ErrorResponse {
     pub error: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_error: Option<String>,
 }

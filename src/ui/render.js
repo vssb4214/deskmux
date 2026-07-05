@@ -9,6 +9,7 @@ import {
   classifyApplyResult,
   summaryBannerText,
 } from '../lib/summary.js';
+import { CONFIG_FILE_HINT } from '../lib/config-error.js';
 
 /**
  * @param {MonitorOutcome} outcome
@@ -52,6 +53,32 @@ export function renderBanner(container, message, kind) {
   container.hidden = !message;
   container.textContent = message ?? '';
   container.className = `banner banner-${kind}`;
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string | undefined | null} configError
+ */
+export function renderConfigErrorBanner(container, configError) {
+  container.hidden = false;
+  container.className = 'banner banner-error';
+  container.replaceChildren();
+
+  const title = document.createElement('p');
+  title.className = 'config-error-title';
+  const titleStrong = document.createElement('strong');
+  titleStrong.textContent = 'Config not loaded';
+  title.appendChild(titleStrong);
+
+  const detail = document.createElement('p');
+  detail.className = 'config-error-detail';
+  detail.textContent = configError?.trim() || 'Unknown configuration error.';
+
+  const hint = document.createElement('p');
+  hint.className = 'config-error-hint';
+  hint.textContent = CONFIG_FILE_HINT;
+
+  container.append(title, detail, hint);
 }
 
 /**
