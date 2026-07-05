@@ -1,7 +1,11 @@
 pub mod bind;
 pub mod client;
 mod handlers;
+#[cfg(test)]
+mod peer_orchestration;
 mod server;
+#[cfg(test)]
+mod test_server;
 pub mod types;
 
 pub use bind::{resolve_bind_addr, DEFAULT_BIND_HOST, DEFAULT_PORT};

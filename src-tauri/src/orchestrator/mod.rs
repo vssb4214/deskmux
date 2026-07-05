@@ -78,7 +78,9 @@ async fn apply_on_peer(
             device_id: device_id.to_string(),
             peer: Some(peer_ref),
             outcome: PeerOutcome::Success {
+                local_only: response.local_only,
                 results: response.local_results,
+                peer_results: response.peer_results,
             },
         },
         Err(PeerClientError::Http { status, error }) => PeerApplyOutcome {
@@ -208,6 +210,7 @@ mod tests {
 
     fn peer_success_result() -> PeerApplyResponse {
         PeerApplyResponse {
+            local_only: true,
             local_results: vec![MonitorResult {
                 monitor_id: "monitor2".to_string(),
                 device_id: "device-b".to_string(),
@@ -215,6 +218,7 @@ mod tests {
                 executed: false,
                 outcome: MonitorOutcome::DryRun,
             }],
+            peer_results: vec![],
         }
     }
 
