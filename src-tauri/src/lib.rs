@@ -22,17 +22,14 @@ pub fn run() {
             match &config_result {
                 Ok(cfg) => println!("deskmux: loaded config for device '{}'", cfg.device_name),
                 Err(err) => {
-                    // Log load/validation failures; do not hide them behind HTTP 503 alone.
                     eprintln!("deskmux: failed to load deskmux.config.json\n{err}");
-                    // TODO(ui): surface config errors in the dashboard (banner or settings).
                 }
             }
-            let config = config_result.ok();
-            let api_base_url = api_base_url_from_config(config.as_ref());
+            let api_base_url = api_base_url_from_config(config_result.as_ref().ok());
             app.manage(BootstrapState { api_base_url });
             // Start the API even when config failed: /health stays up with configLoaded=false;
             // /status and /apply-preset return 503 until a valid config is loaded.
-            api::spawn_server(config);
+            api::spawn_server(config_result);
             Ok(())
         })
         .run(tauri::generate_context!())
