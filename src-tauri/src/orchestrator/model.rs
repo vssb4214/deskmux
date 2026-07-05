@@ -35,7 +35,10 @@ pub struct PeerApplyOutcome {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PeerOutcome {
     Success {
+        local_only: bool,
         results: Vec<MonitorResult>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        peer_results: Vec<PeerApplyOutcome>,
     },
     Failed {
         error: String,
@@ -76,7 +79,7 @@ fn monitor_result_is_success(result: &MonitorResult) -> bool {
 
 fn peer_results_are_successful(peer: &PeerApplyOutcome) -> bool {
     match &peer.outcome {
-        PeerOutcome::Success { results } => results.iter().all(monitor_result_is_success),
+        PeerOutcome::Success { results, .. } => results.iter().all(monitor_result_is_success),
         PeerOutcome::Failed { .. } => false,
     }
 }
