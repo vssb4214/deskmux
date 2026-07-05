@@ -49,9 +49,21 @@ pub struct Monitor {
     /// this config's `deviceName` (see `Monitor::controlled_by`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub controlled_by: Option<String>,
+    /// This monitor's identity for native DDC/CI control (Windows only for now). Required if
+    /// any of this monitor's `inputs` set their own `nativeDdc`. See docs/CONFIG.md for how
+    /// `displayId` is derived and its known limitation with identical monitor models.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_ddc: Option<MonitorNativeDdc>,
     /// Keyed by device id. Required on the owning machine; remote stubs may omit inputs.
     #[serde(default)]
     pub inputs: HashMap<String, Input>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MonitorNativeDdc {
+    /// EDID-derived identity for this physical display (see docs/CONFIG.md).
+    pub display_id: String,
 }
 
 impl Monitor {
@@ -63,10 +75,29 @@ impl Monitor {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Input {
     #[serde(rename = "type")]
     pub kind: String,
-    pub command: String,
+    /// Shell command that selects this input. Optional if `nativeDdc` is set instead — but at
+    /// least one of the two is required (validated). Existing configs always set this, so
+    /// nothing changes for them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Native DDC/CI input-source parameters (Windows only for now). Requires this input's
+    /// monitor to also set `nativeDdc.displayId`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_ddc: Option<InputNativeDdc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InputNativeDdc {
+    /// The VCP input-source (code 0x60) value that selects this device's input on this
+    /// monitor. Read it off the monitor, same as shell command values — DeskMux doesn't guess.
+    /// Input-source is the only capability this exposes for now; there is deliberately no raw
+    /// VCP code field here.
+    pub input_source_value: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

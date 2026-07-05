@@ -90,4 +90,78 @@ mod tests {
         let result = write_and_load("invalid", INVALID_JSON);
         assert!(matches!(result, Err(LoadError::Invalid(_))));
     }
+
+    #[test]
+    fn loads_config_with_native_ddc_fields() {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [
+                { "id": "device-a", "label": "Device A" }
+            ],
+            "monitors": [
+                {
+                    "id": "monitor1",
+                    "label": "Monitor 1",
+                    "order": 0,
+                    "nativeDdc": { "displayId": "DEL4176:0" },
+                    "inputs": {
+                        "device-a": {
+                            "type": "displayport",
+                            "nativeDdc": { "inputSourceValue": 15 }
+                        }
+                    }
+                }
+            ],
+            "presets": {
+                "all_a": { "label": "All A", "layout": { "monitor1": "device-a" } }
+            }
+        }"#;
+
+        let config = write_and_load("native-ddc", json).expect("should load");
+
+        let monitor = &config.monitors[0];
+        assert_eq!(
+            monitor.native_ddc.as_ref().map(|n| n.display_id.as_str()),
+            Some("DEL4176:0")
+        );
+        let input = &monitor.inputs["device-a"];
+        assert_eq!(input.command, None);
+        assert_eq!(
+            input.native_ddc.as_ref().map(|n| n.input_source_value),
+            Some(15)
+        );
+    }
+
+    /// Guards the input-source-only boundary: a raw VCP code has no field to attach to, and
+    /// `deny_unknown_fields` makes that a hard parse error rather than a silently ignored one.
+    #[test]
+    fn native_ddc_rejects_unknown_fields() {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [
+                { "id": "device-a", "label": "Device A" }
+            ],
+            "monitors": [
+                {
+                    "id": "monitor1",
+                    "label": "Monitor 1",
+                    "order": 0,
+                    "nativeDdc": { "displayId": "DEL4176:0" },
+                    "inputs": {
+                        "device-a": {
+                            "type": "displayport",
+                            "nativeDdc": { "inputSourceValue": 15, "vcpCode": 98 }
+                        }
+                    }
+                }
+            ],
+            "presets": {}
+        }"#;
+
+        let result = write_and_load("native-ddc-unknown-field", json);
+
+        assert!(matches!(result, Err(LoadError::Parse(_))));
+    }
 }

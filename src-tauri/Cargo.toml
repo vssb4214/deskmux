@@ -31,3 +31,12 @@ async-trait = "0.1"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 
+[target.'cfg(windows)'.dependencies]
+# Native DDC/CI control (see docs/ROADMAP.md for why windows-rs over ddc-hi/ddc-winapi).
+# Target-gated so non-Windows builds never fetch or compile this at all.
+windows = { version = "0.62", features = [
+    "Win32_Devices_Display",
+    "Win32_Graphics_Gdi",
+    "Win32_Foundation",
+] }
+
