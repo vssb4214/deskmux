@@ -4,7 +4,14 @@
 /** @typedef {import('../types.js').PeerApplyOutcome} PeerApplyOutcome */
 /** @typedef {import('../types.js').MonitorOutcome} MonitorOutcome */
 /** @typedef {import('../types.js').PlanningError} PlanningError */
+/** @typedef {import('../types.js').DeskMuxEvent} DeskMuxEvent */
 
+import {
+  eventKindToBadgeClass,
+  formatEventKindLabel,
+  formatEventMeta,
+  formatEventTimestamp,
+} from '../lib/events.js';
 import {
   classifyApplyResult,
   summaryBannerText,
@@ -343,6 +350,62 @@ function renderPeerResults(peers, depth) {
   }
 
   return wrap;
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {DeskMuxEvent[]} events
+ */
+export function renderEvents(container, events) {
+  container.replaceChildren();
+
+  if (events.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'meta-line muted';
+    empty.textContent = 'No recent events yet.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'event-list';
+
+  for (const event of events) {
+    const item = document.createElement('li');
+    item.className = 'event-item';
+
+    const header = document.createElement('div');
+    header.className = 'event-header';
+
+    const badge = document.createElement('span');
+    badge.className = eventKindToBadgeClass(event.kind);
+    badge.textContent = formatEventKindLabel(event.kind);
+    header.appendChild(badge);
+
+    const time = document.createElement('time');
+    time.className = 'event-time';
+    time.dateTime = String(event.timestampMs);
+    time.textContent = formatEventTimestamp(event.timestampMs);
+    header.appendChild(time);
+
+    const message = document.createElement('p');
+    message.className = 'event-message';
+    message.textContent = event.message;
+
+    const meta = formatEventMeta(event);
+    item.appendChild(header);
+    item.appendChild(message);
+    if (meta) {
+      const metaLine = document.createElement('p');
+      metaLine.className = 'event-meta';
+      metaLine.textContent = meta;
+      item.appendChild(metaLine);
+    }
+
+    list.appendChild(item);
+  }
+
+  container.appendChild(list);
 }
 
 /**

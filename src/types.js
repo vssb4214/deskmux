@@ -26,6 +26,7 @@
  *   deviceId: string,
  *   command: string | null,
  *   executed: boolean,
+ *   isNativeDdc: boolean,
  *   outcome: MonitorOutcome
  * }} MonitorResult
  * @typedef {{ host: string, port: number }} PeerRef
@@ -50,6 +51,17 @@
  *   localResults: MonitorResult[],
  *   peerResults: PeerApplyOutcome[]
  * }} ApplyPresetResponse
+ * @typedef {'info' | 'success' | 'error'} EventKind
+ * @typedef {'api' | 'tray' | 'hotkey'} ApplySource
+ * @typedef {{
+ *   timestampMs: number,
+ *   kind: EventKind,
+ *   message: string,
+ *   preset?: string,
+ *   source?: ApplySource,
+ *   monitorId?: string
+ * }} DeskMuxEvent
+ * @typedef {{ events: DeskMuxEvent[] }} EventsResponse
  * @typedef {'dry-run' | 'planning-failed' | 'success' | 'partial' | 'failed'} ApplySummaryClass
  */
 

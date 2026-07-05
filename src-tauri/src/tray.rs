@@ -6,6 +6,7 @@ use tauri::{
     AppHandle, Manager,
 };
 
+use crate::api::events::ApplySource;
 use crate::api::{apply_preset_to_arc, AppState, ApplyPresetStateError};
 
 const MENU_SHOW: &str = "show";
@@ -62,8 +63,9 @@ pub fn init(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
                     let state = state.clone();
                     let preset = preset.to_string();
                     tauri::async_runtime::spawn(async move {
-                        match apply_preset_to_arc(state, &preset, false, false).await {
-                            Ok(result) if result.is_full_success() => {}
+                        match apply_preset_to_arc(state, &preset, false, false, ApplySource::Tray)
+                            .await
+                        {
                             Ok(_) => {
                                 eprintln!("deskmux: tray preset '{preset}' applied with errors");
                             }

@@ -73,6 +73,15 @@ pub struct MonitorResult {
     pub command: Option<String>,
     /// True only if a process was actually spawned.
     pub executed: bool,
+    /// True when this result came from a `BackendAction::NativeDdc`. Set at construction time
+    /// from the resolved action — never inferred from `command`'s display text, which is
+    /// free-form and may be reworded. Consumers that need to distinguish native DDC results
+    /// (e.g. event recording) must key off this field, not `command`.
+    ///
+    /// `#[serde(default)]` so a peer running an older build that predates this field still
+    /// deserializes cleanly (defaults to `false`, the safe fallback).
+    #[serde(default)]
+    pub is_native_ddc: bool,
     pub outcome: MonitorOutcome,
 }
 

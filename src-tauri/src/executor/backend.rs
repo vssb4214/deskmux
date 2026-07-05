@@ -18,7 +18,8 @@ pub(super) enum BackendAction {
 }
 
 impl BackendAction {
-    /// Human-readable form for `MonitorResult.command`.
+    /// Human-readable form for `MonitorResult.command`. Display-only — never inspect this
+    /// string to decide what kind of action ran; use `is_native_ddc` instead.
     pub(super) fn display_command(&self) -> String {
         match self {
             BackendAction::Shell(command) => command.clone(),
@@ -28,6 +29,12 @@ impl BackendAction {
                 value,
             } => format!("native DDC: display '{display_id}' VCP 0x{vcp_code:02x} = {value}"),
         }
+    }
+
+    /// The authoritative discriminant for `MonitorResult.is_native_ddc` — set from this enum's
+    /// variant, not parsed back out of `display_command`'s text.
+    pub(super) fn is_native_ddc(&self) -> bool {
+        matches!(self, BackendAction::NativeDdc { .. })
     }
 }
 

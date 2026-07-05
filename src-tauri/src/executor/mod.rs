@@ -162,6 +162,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, backend: &dyn Backend) -> Moni
                 device_id,
                 command: None,
                 executed: false,
+                is_native_ddc: false,
                 outcome: MonitorOutcome::ResolutionFailed { error },
             };
         }
@@ -169,6 +170,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, backend: &dyn Backend) -> Moni
     };
 
     let display_command = cmd.action.display_command();
+    let is_native_ddc = cmd.action.is_native_ddc();
 
     if dry_run {
         return MonitorResult {
@@ -176,6 +178,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, backend: &dyn Backend) -> Moni
             device_id: cmd.device_id,
             command: Some(display_command),
             executed: false,
+            is_native_ddc,
             outcome: MonitorOutcome::DryRun,
         };
     }
@@ -199,6 +202,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, backend: &dyn Backend) -> Moni
                 device_id: cmd.device_id,
                 command: Some(display_command),
                 executed: true,
+                is_native_ddc,
                 outcome,
             }
         }
@@ -207,6 +211,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, backend: &dyn Backend) -> Moni
             device_id: cmd.device_id,
             command: Some(display_command),
             executed: true,
+            is_native_ddc,
             outcome: MonitorOutcome::SpawnFailed {
                 message: e.to_string(),
             },
@@ -443,6 +448,7 @@ mod tests {
                 device_id: "device-a".to_string(),
                 command: None,
                 executed: false,
+                is_native_ddc: false,
                 outcome: MonitorOutcome::ResolutionFailed {
                     error: ResolutionError::UnknownMonitor {
                         monitor_id: "ghost-monitor".to_string(),
@@ -469,6 +475,7 @@ mod tests {
                     device_id: "device-a".to_string(),
                     command: Some("cmd-monitor1-a".to_string()),
                     executed: true,
+                    is_native_ddc: false,
                     outcome: MonitorOutcome::Success {
                         stdout: "ok".to_string(),
                         stderr: String::new(),
@@ -479,6 +486,7 @@ mod tests {
                     device_id: "device-a".to_string(),
                     command: Some("cmd-monitor2-a".to_string()),
                     executed: true,
+                    is_native_ddc: false,
                     outcome: MonitorOutcome::Failed {
                         stdout: String::new(),
                         stderr: "nope".to_string(),
@@ -490,6 +498,7 @@ mod tests {
                     device_id: "device-a".to_string(),
                     command: None,
                     executed: false,
+                    is_native_ddc: false,
                     outcome: MonitorOutcome::ResolutionFailed {
                         error: ResolutionError::UnknownMonitor {
                             monitor_id: "ghost-monitor".to_string(),
