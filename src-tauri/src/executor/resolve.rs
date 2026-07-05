@@ -253,4 +253,25 @@ mod tests {
             }
         );
     }
+
+    /// Locks in today's (only) backend selection rule: every resolved entry is
+    /// `BackendAction::Shell`, because `Input` has no native-DDC alternative yet. Once Phase 2
+    /// adds one, this test should fail loudly and force a deliberate update to the selection
+    /// logic rather than silently changing the default.
+    #[test]
+    fn always_selects_shell_backend_for_now() {
+        let config = fixture_config();
+
+        let entries = preset_layout_entries(&config, "valid_preset").expect("should resolve");
+        let resolved = resolve_layout_entries(&config, &entries);
+
+        assert!(!resolved.is_empty());
+        assert!(resolved.iter().all(|entry| matches!(
+            entry,
+            ResolvedEntry::Ready(ResolvedCommand {
+                action: BackendAction::Shell(_),
+                ..
+            })
+        )));
+    }
 }
