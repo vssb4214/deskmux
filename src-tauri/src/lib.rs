@@ -1,6 +1,7 @@
 pub mod api;
 mod config;
 pub mod executor;
+pub mod orchestrator;
 
 pub use api::{PeerClient, PeerClientError};
 pub use config::Config;
