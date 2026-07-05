@@ -24,6 +24,15 @@ pub fn resolve_bind_addr(config: Option<&Config>) -> SocketAddr {
     SocketAddr::from((host, port))
 }
 
+/// Base URL the dashboard should use to reach this machine's local HTTP API.
+///
+/// Always loopback (`127.0.0.1`), even when `apiLanAccess` binds the server on
+/// `0.0.0.0`. Port follows loaded config or [`DEFAULT_PORT`] when config is missing.
+pub fn dashboard_api_base_url(config: Option<&Config>) -> String {
+    let port = config.map(|c| c.api_port).unwrap_or(DEFAULT_PORT);
+    format!("http://{DEFAULT_BIND_HOST}:{port}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -43,6 +52,33 @@ mod tests {
         }
     }
 
+    fn config_with_port(port: u16) -> Config {
+        Config {
+            api_port: port,
+            ..config_with_lan(false)
+        }
+    }
+
+    #[test]
+    fn dashboard_url_defaults_when_config_missing() {
+        assert_eq!(dashboard_api_base_url(None), "http://127.0.0.1:3737");
+    }
+
+    #[test]
+    fn dashboard_url_uses_configured_port() {
+        assert_eq!(
+            dashboard_api_base_url(Some(&config_with_port(4000))),
+            "http://127.0.0.1:4000"
+        );
+    }
+
+    #[test]
+    fn dashboard_url_stays_loopback_when_lan_access_enabled() {
+        assert_eq!(
+            dashboard_api_base_url(Some(&config_with_lan(true))),
+            "http://127.0.0.1:3737"
+        );
+    }
     #[test]
     fn defaults_to_loopback_when_config_missing() {
         let addr = resolve_bind_addr(None);
