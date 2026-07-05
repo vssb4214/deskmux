@@ -106,6 +106,8 @@ mod tests {
 
         Config {
             device_name: "device-a".to_string(),
+            api_port: 3737,
+            api_lan_access: false,
             peers: vec![Peer {
                 name: "device-b".to_string(),
                 host: "192.168.1.2".to_string(),

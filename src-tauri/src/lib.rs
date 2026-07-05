@@ -1,6 +1,8 @@
+pub mod api;
 mod config;
 pub mod executor;
 
+pub use api::{PeerClient, PeerClientError};
 pub use config::Config;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
