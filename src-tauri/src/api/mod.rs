@@ -324,7 +324,7 @@ mod tests {
             .inputs
             .get_mut("device-a")
             .unwrap()
-            .command = "exit 1".to_string();
+            .command = Some("exit 1".to_string());
         let app = router(Arc::new(AppState::from_load_result(Ok(config))));
         post_json(
             &app,

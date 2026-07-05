@@ -40,9 +40,23 @@ pub fn validate(config: &Config) -> Result<(), ConfigErrors> {
             }
         }
 
-        for device_id in monitor.inputs.keys() {
+        for (device_id, input) in &monitor.inputs {
             if !device_ids.contains(device_id.as_str()) {
                 errors.push(ConfigError::UnknownDeviceInMonitorInput {
+                    monitor_id: monitor.id.clone(),
+                    device_id: device_id.clone(),
+                });
+            }
+
+            if input.command.is_none() && input.native_ddc.is_none() {
+                errors.push(ConfigError::InputMissingBackend {
+                    monitor_id: monitor.id.clone(),
+                    device_id: device_id.clone(),
+                });
+            }
+
+            if input.native_ddc.is_some() && monitor.native_ddc.is_none() {
+                errors.push(ConfigError::NativeInputMissingDisplayId {
                     monitor_id: monitor.id.clone(),
                     device_id: device_id.clone(),
                 });
@@ -116,7 +130,7 @@ pub fn validate(config: &Config) -> Result<(), ConfigErrors> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::model::{Device, Input, Peer, Preset};
+    use crate::config::model::{Device, Input, InputNativeDdc, MonitorNativeDdc, Peer, Preset};
 
     fn valid_config() -> Config {
         let mut inputs = HashMap::new();
@@ -124,7 +138,8 @@ mod tests {
             "device-a".to_string(),
             Input {
                 kind: "hdmi".to_string(),
-                command: "cmd-a".to_string(),
+                command: Some("cmd-a".to_string()),
+                native_ddc: None,
             },
         );
 
@@ -164,6 +179,7 @@ mod tests {
                 label: "Monitor 1".to_string(),
                 order: 0,
                 controlled_by: None,
+                native_ddc: None,
                 inputs,
             }],
             presets,
@@ -193,6 +209,7 @@ mod tests {
             label: "Monitor 2".to_string(),
             order: 1,
             controlled_by: Some("device-b".to_string()),
+            native_ddc: None,
             inputs: HashMap::new(),
         });
         config
@@ -261,7 +278,8 @@ mod tests {
             "ghost-device".to_string(),
             Input {
                 kind: "hdmi".to_string(),
-                command: "cmd".to_string(),
+                command: Some("cmd".to_string()),
+                native_ddc: None,
             },
         );
 
@@ -274,6 +292,74 @@ mod tests {
                 device_id: "ghost-device".to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn rejects_input_missing_backend() {
+        let mut config = valid_config();
+        config.monitors[0].inputs.insert(
+            "device-b".to_string(),
+            Input {
+                kind: "hdmi".to_string(),
+                command: None,
+                native_ddc: None,
+            },
+        );
+
+        let errors = validate(&config).unwrap_err();
+
+        assert_eq!(
+            errors.0,
+            vec![ConfigError::InputMissingBackend {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-b".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rejects_native_input_without_display_id() {
+        let mut config = valid_config();
+        config.monitors[0].inputs.insert(
+            "device-b".to_string(),
+            Input {
+                kind: "hdmi".to_string(),
+                command: None,
+                native_ddc: Some(InputNativeDdc {
+                    input_source_value: 15,
+                }),
+            },
+        );
+
+        let errors = validate(&config).unwrap_err();
+
+        assert_eq!(
+            errors.0,
+            vec![ConfigError::NativeInputMissingDisplayId {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-b".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn native_only_input_with_display_id_passes() {
+        let mut config = valid_config();
+        config.monitors[0].native_ddc = Some(MonitorNativeDdc {
+            display_id: "DEL4176:0".to_string(),
+        });
+        config.monitors[0].inputs.insert(
+            "device-b".to_string(),
+            Input {
+                kind: "hdmi".to_string(),
+                command: None,
+                native_ddc: Some(InputNativeDdc {
+                    input_source_value: 15,
+                }),
+            },
+        );
+
+        assert!(validate(&config).is_ok());
     }
 
     #[test]
@@ -409,6 +495,7 @@ mod tests {
             label: "Monitor 2".to_string(),
             order: 1,
             controlled_by: Some("device-b".to_string()),
+            native_ddc: None,
             inputs: HashMap::new(),
         });
         config
