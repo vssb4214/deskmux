@@ -36,9 +36,9 @@ async fn spawn_harness_on(
     coord_config: Config,
 ) -> TwoInstanceHarness {
     let (peer_addr, peer_server) =
-        spawn_test_server_on(peer_listener, AppState::new(Some(peer_config))).await;
+        spawn_test_server_on(peer_listener, AppState::from_load_result(Ok(peer_config))).await;
     let (coord_addr, coord_server) =
-        spawn_test_server_on(coord_listener, AppState::new(Some(coord_config))).await;
+        spawn_test_server_on(coord_listener, AppState::from_load_result(Ok(coord_config))).await;
 
     TwoInstanceHarness {
         peer_addr,

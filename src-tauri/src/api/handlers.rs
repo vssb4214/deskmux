@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 
-use crate::config::Config;
+use crate::config::{Config, LoadError};
 use crate::executor::ExecutorError;
 use crate::orchestrator::{apply_preset, PeerClientAdapter};
 
@@ -17,14 +17,23 @@ use super::types::{
 
 pub struct AppState {
     pub config: Option<Config>,
+    pub config_error: Option<String>,
     pub last_applied_preset: Mutex<Option<String>>,
 }
 
 impl AppState {
-    pub fn new(config: Option<Config>) -> Self {
-        Self {
-            config,
-            last_applied_preset: Mutex::new(None),
+    pub fn from_load_result(result: Result<Config, LoadError>) -> Self {
+        match result {
+            Ok(config) => Self {
+                config: Some(config),
+                config_error: None,
+                last_applied_preset: Mutex::new(None),
+            },
+            Err(err) => Self {
+                config: None,
+                config_error: Some(err.to_string()),
+                last_applied_preset: Mutex::new(None),
+            },
         }
     }
 }
@@ -33,6 +42,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
     Json(HealthResponse {
         status: "ok".to_string(),
         config_loaded: state.config.is_some(),
+        config_error: state.config_error.clone(),
     })
 }
 
@@ -42,7 +52,7 @@ pub async fn status(
     let config = state
         .config
         .as_ref()
-        .ok_or(service_unavailable("config not loaded"))?;
+        .ok_or_else(|| config_not_loaded(&state))?;
 
     let last_applied_preset = state
         .last_applied_preset
@@ -92,7 +102,7 @@ pub async fn apply_preset_handler(
     let config = state
         .config
         .as_ref()
-        .ok_or(service_unavailable("config not loaded"))?;
+        .ok_or_else(|| config_not_loaded(&state))?;
 
     let peer_client = PeerClientAdapter;
     match apply_preset(
@@ -126,11 +136,12 @@ pub async fn apply_preset_handler(
     }
 }
 
-fn service_unavailable(message: &str) -> (StatusCode, Json<ErrorResponse>) {
+fn config_not_loaded(state: &AppState) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Json(ErrorResponse {
-            error: message.to_string(),
+            error: "config not loaded".to_string(),
+            config_error: state.config_error.clone(),
         }),
     )
 }
@@ -140,6 +151,7 @@ fn bad_request(message: &str) -> (StatusCode, Json<ErrorResponse>) {
         StatusCode::BAD_REQUEST,
         Json(ErrorResponse {
             error: message.to_string(),
+            config_error: None,
         }),
     )
 }
@@ -147,6 +159,9 @@ fn bad_request(message: &str) -> (StatusCode, Json<ErrorResponse>) {
 fn not_found(message: String) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::NOT_FOUND,
-        Json(ErrorResponse { error: message }),
+        Json(ErrorResponse {
+            error: message,
+            config_error: None,
+        }),
     )
 }

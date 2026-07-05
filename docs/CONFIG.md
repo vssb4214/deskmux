@@ -86,9 +86,29 @@ Peer HTTP calls still run during dry-run (with `dryRun: true` on the peer) so yo
 
 DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`):
 
-- `GET /health` — liveness; works even when config failed to load
-- `GET /status` — device name, presets, monitors (no shell commands)
-- `POST /apply-preset` — apply a named preset (see below)
+- `GET /health` — liveness; works even when config failed to load. When config is missing or invalid, the response includes `configError` with a human-readable load/validation message (no stack traces or shell commands).
+- `GET /status` — device name, presets, monitors (no shell commands). Returns **503** with `{ "error": "config not loaded", "configError": "..." }` when config did not load.
+- `POST /apply-preset` — apply a named preset (see below). Returns the same **503** shape when config did not load.
+
+### `GET /health`
+
+**Response** (200):
+
+| Field           | When config loaded | When config missing/invalid |
+|-----------------|--------------------|-----------------------------|
+| `status`        | `"ok"`             | `"ok"`                      |
+| `configLoaded`  | `true`             | `false`                     |
+| `configError`   | omitted            | human-readable load/validation message |
+
+Example when config failed:
+
+```json
+{
+  "status": "ok",
+  "configLoaded": false,
+  "configError": "failed to read config file: ..."
+}
+```
 
 ### `POST /apply-preset`
 

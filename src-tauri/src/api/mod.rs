@@ -41,6 +41,18 @@ mod tests {
 
     use crate::config::Config;
 
+    fn app_with_config() -> Router {
+        router(AppState::from_load_result(Ok(test_config())))
+    }
+
+    fn app_without_config() -> Router {
+        router(AppState::from_load_result(Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "deskmux.config.json",
+        )
+        .into())))
+    }
+
     async fn get_with_origin(
         app: &Router,
         uri: &str,
@@ -91,7 +103,7 @@ mod tests {
 
     #[tokio::test]
     async fn cors_allows_localhost_dev_origin_on_status() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, headers, _) = get_with_origin(&app, "/status", "http://127.0.0.1:1430").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
@@ -102,7 +114,7 @@ mod tests {
 
     #[tokio::test]
     async fn cors_allows_localhost_hostname_on_status() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, headers, _) = get_with_origin(&app, "/status", "http://localhost:1430").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
@@ -113,7 +125,7 @@ mod tests {
 
     #[tokio::test]
     async fn cors_rejects_untrusted_origin() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, headers, _) = get_with_origin(&app, "/status", "http://evil.example").await;
         assert_eq!(status, StatusCode::OK);
         assert!(headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
@@ -121,7 +133,7 @@ mod tests {
 
     #[tokio::test]
     async fn cors_options_preflight_for_apply_preset() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, headers) =
             options_preflight(&app, "/apply-preset", "http://127.0.0.1:1430").await;
         assert_eq!(status, StatusCode::OK);
@@ -194,25 +206,55 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn health_returns_ok_and_config_loaded_flag() {
-        let app = router(AppState::new(None));
+    async fn health_without_config_includes_config_error() {
+        let app = app_without_config();
         let (status, json) = get(&app, "/health").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["status"], "ok");
         assert_eq!(json["configLoaded"], false);
+        let config_error = json["configError"]
+            .as_str()
+            .expect("configError should be present");
+        assert!(config_error.contains("failed to read config file"));
+    }
+
+    #[tokio::test]
+    async fn health_with_config_omits_config_error() {
+        let app = app_with_config();
+        let (status, json) = get(&app, "/health").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["configLoaded"], true);
+        assert!(json.get("configError").is_none());
     }
 
     #[tokio::test]
     async fn status_returns_503_when_config_not_loaded() {
-        let app = router(AppState::new(None));
+        let app = app_without_config();
         let (status, json) = get(&app, "/status").await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(json["error"], "config not loaded");
+        assert!(json["configError"]
+            .as_str()
+            .unwrap()
+            .contains("failed to read config file"));
+    }
+
+    #[tokio::test]
+    async fn apply_preset_503_includes_config_error() {
+        let app = app_without_config();
+        let (status, json) =
+            post_json(&app, "/apply-preset", r#"{"preset":"all_a","dryRun":true}"#).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(json["error"], "config not loaded");
+        assert!(json["configError"]
+            .as_str()
+            .unwrap()
+            .contains("failed to read config file"));
     }
 
     #[tokio::test]
     async fn status_returns_safe_summaries_without_shell_commands() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, json) = get(&app, "/status").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["deviceName"], "device-a");
@@ -226,7 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_preset_dry_run_returns_results_without_executing() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, json) =
             post_json(&app, "/apply-preset", r#"{"preset":"all_a","dryRun":true}"#).await;
         assert_eq!(status, StatusCode::OK);
@@ -238,7 +280,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_preset_unknown_preset_returns_404() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, json) = post_json(&app, "/apply-preset", r#"{"preset":"missing"}"#).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert!(json["error"].as_str().unwrap().contains("missing"));
@@ -246,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_preset_empty_name_returns_400() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, json) = post_json(&app, "/apply-preset", r#"{"preset":"  "}"#).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(json["error"], "preset name is required");
@@ -254,7 +296,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_preset_malformed_json_returns_400() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (status, json) = post_json(&app, "/apply-preset", r#"{"preset":}"#).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(json["error"], "invalid JSON body");
@@ -262,7 +304,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_preset_updates_last_applied_preset_on_status() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         let (_, apply_json) = post_json(
             &app,
             "/apply-preset",
@@ -284,7 +326,7 @@ mod tests {
             .get_mut("device-a")
             .unwrap()
             .command = "exit 1".to_string();
-        let app = router(AppState::new(Some(config)));
+        let app = router(AppState::from_load_result(Ok(config)));
         post_json(
             &app,
             "/apply-preset",
@@ -298,7 +340,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_preset_dry_run_does_not_update_last_applied_preset() {
-        let app = router(AppState::new(Some(test_config())));
+        let app = app_with_config();
         post_json(&app, "/apply-preset", r#"{"preset":"all_a","dryRun":true}"#).await;
 
         let (_, status_json) = get(&app, "/status").await;
