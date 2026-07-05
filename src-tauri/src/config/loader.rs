@@ -133,6 +133,87 @@ mod tests {
         );
     }
 
+    #[test]
+    fn native_ddc_parses_input_source_value_above_255() {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [
+                { "id": "device-a", "label": "Device A" },
+                { "id": "device-b", "label": "Device B" }
+            ],
+            "monitors": [{
+                "id": "monitor1",
+                "label": "Monitor 1",
+                "order": 0,
+                "nativeDdc": { "displayId": "K@P:d0e5:0" },
+                "inputs": {
+                    "device-a": {
+                        "type": "displayport",
+                        "nativeDdc": { "inputSourceValue": 4626 }
+                    },
+                    "device-b": {
+                        "type": "hdmi",
+                        "nativeDdc": { "inputSourceValue": 4623 }
+                    }
+                }
+            }],
+            "presets": {}
+        }"#;
+
+        let config = write_and_load("native-ddc-large-value", json).expect("should load");
+
+        assert_eq!(
+            config.monitors[0].inputs["device-a"]
+                .native_ddc
+                .as_ref()
+                .map(|n| n.input_source_value),
+            Some(4626)
+        );
+        assert_eq!(
+            config.monitors[0].inputs["device-b"]
+                .native_ddc
+                .as_ref()
+                .map(|n| n.input_source_value),
+            Some(4623)
+        );
+    }
+
+    #[test]
+    fn native_ddc_input_source_value_round_trips_through_json() {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [{ "id": "device-a", "label": "Device A" }],
+            "monitors": [{
+                "id": "monitor1",
+                "label": "Monitor 1",
+                "order": 0,
+                "nativeDdc": { "displayId": "K@P:d0e5:0" },
+                "inputs": {
+                    "device-a": {
+                        "type": "displayport",
+                        "nativeDdc": { "inputSourceValue": 4626 }
+                    }
+                }
+            }],
+            "presets": {}
+        }"#;
+
+        let config = write_and_load("native-ddc-round-trip", json).expect("should load");
+        let serialized = serde_json::to_string(&config).expect("should serialize");
+        let round_trip: crate::config::Config =
+            serde_json::from_str(&serialized).expect("should deserialize");
+
+        assert_eq!(
+            round_trip.monitors[0].inputs["device-a"]
+                .native_ddc
+                .as_ref()
+                .map(|n| n.input_source_value),
+            Some(4626)
+        );
+    }
+
     /// Guards the input-source-only boundary: a raw VCP code has no field to attach to, and
     /// `deny_unknown_fields` makes that a hard parse error rather than a silently ignored one.
     #[test]
