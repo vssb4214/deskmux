@@ -9,8 +9,12 @@ pub use api::{PeerClient, PeerClientError};
 pub use bootstrap::BootstrapState;
 pub use config::Config;
 
+use std::sync::Arc;
+
 use commands::api_base_url_from_config;
 use tauri::Manager;
+
+use api::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,11 +29,12 @@ pub fn run() {
                     eprintln!("deskmux: failed to load deskmux.config.json\n{err}");
                 }
             }
-            let api_base_url = api_base_url_from_config(config_result.as_ref().ok());
+            let app_state = Arc::new(AppState::from_load_result(config_result));
+            let api_base_url = api_base_url_from_config(app_state.config.as_ref());
             app.manage(BootstrapState { api_base_url });
             // Start the API even when config failed: /health stays up with configLoaded=false;
             // /status and /apply-preset return 503 until a valid config is loaded.
-            api::spawn_server(config_result);
+            api::spawn_server(app_state);
             Ok(())
         })
         .run(tauri::generate_context!())

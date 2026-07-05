@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
@@ -20,7 +21,7 @@ pub async fn spawn_test_server_on(
 ) -> (SocketAddr, JoinHandle<()>) {
     let addr = listener.local_addr().expect("local addr");
     let handle = tokio::spawn(async move {
-        axum::serve(listener, router(state))
+        axum::serve(listener, router(Arc::new(state)))
             .await
             .expect("serve test API");
     });
