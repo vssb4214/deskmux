@@ -100,14 +100,18 @@ The owning peer's config carries the real `inputs` and runs the command when the
   "id": "monitor1",
   "label": "Left Monitor",
   "order": 0,
-  "nativeDdc": { "displayId": "DEL4176:0" },
+  "nativeDdc": { "displayId": "K@P:d0e5:0" },
   "inputs": {
     "windows-pc": {
       "type": "displayport",
-      "command": "C:\\Tools\\ControlMyMonitor.exe /SetValue \"\\\\.\\DISPLAY1\\Monitor0\" 60 15",
-      "nativeDdc": { "inputSourceValue": 15 }
+      "command": "C:\\Tools\\ControlMyMonitor.exe /SetValue \"\\\\.\\DISPLAY1\\Monitor0\" 60 4626",
+      "nativeDdc": { "inputSourceValue": 4626 }
     },
-    "mac-mini": { "type": "hdmi", "command": "betterdisplaycli set --name=\"LG HDR 4K\" --inputSource=hdmi1" }
+    "mac-mini": {
+      "type": "hdmi",
+      "command": "betterdisplaycli set --name=\"LG HDR 4K\" --inputSource=hdmi1",
+      "nativeDdc": { "inputSourceValue": 4623 }
+    }
   }
 }
 ```
@@ -116,7 +120,11 @@ The owning peer's config carries the real `inputs` and runs the command when the
 
 **Known limitation:** the API DeskMux uses doesn't expose a true per-unit EDID serial number, only manufacturer + product code + a connection-derived identifier. **Two identical monitor models on the same machine can end up with the same `displayId`** and be indistinguishable to DeskMux. If you own two of the exact same monitor, native DDC input switching may not reliably tell them apart yet — use the shell `command` for those monitors instead until per-unit serial matching is added.
 
-**`inputs.<deviceId>.nativeDdc.inputSourceValue`** is the VCP input-source value (code `0x60`) that selects this device's input — the same number you'd read off the monitor for a shell-based `command`, just structured instead of embedded in a command string. DeskMux doesn't guess this value any more than it guesses shell commands.
+**`inputs.<deviceId>.nativeDdc.inputSourceValue`** is the monitor-specific VCP input-source value (code `0x60`) that selects this device's input — the same number you'd read off the monitor for a shell-based `command`, just structured instead of embedded in a command string. DeskMux doesn't guess this value any more than it guesses shell commands.
+
+**Values are often larger than 255.** Real monitors report input-source codes like `4626` (DisplayPort) and `4623` (HDMI) — not small sequential integers. Discover yours by reading VCP `0x60` on the target display (DeskMux startup logs list `displayId` values on Windows; reading the current input value in-app is a planned follow-up). Do not copy example numbers unless you've confirmed them on your hardware.
+
+**Some monitors do not support input switching over DDC**, or may allow reads but reject writes. DeskMux reports a failed result in those cases — the same as a shell command that exits non-zero — and never silently falls back to the shell `command`.
 
 **This is input-source switching only.** There's deliberately no field for an arbitrary VCP code — brightness, contrast, volume, and power are separate future capabilities with their own config fields when they're built, not something you can reach through `nativeDdc` today.
 

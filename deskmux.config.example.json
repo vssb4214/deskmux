@@ -16,14 +16,18 @@
       "id": "monitor1",
       "label": "Left Monitor",
       "order": 0,
-      "nativeDdc": { "displayId": "PLACEHOLDER_EDID_MONITOR1" },
+      "nativeDdc": { "displayId": "K@P:d0e5:0" },
       "inputs": {
         "windows-pc": {
           "type": "displayport",
           "command": "PLACEHOLDER_DDC_MONITOR1_WINDOWS",
-          "nativeDdc": { "inputSourceValue": 15 }
+          "nativeDdc": { "inputSourceValue": 4626 }
         },
-        "mac-mini":   { "type": "hdmi",        "command": "PLACEHOLDER_DDC_MONITOR1_MAC" },
+        "mac-mini": {
+          "type": "hdmi",
+          "command": "PLACEHOLDER_DDC_MONITOR1_MAC",
+          "nativeDdc": { "inputSourceValue": 4623 }
+        },
         "linux-box":  { "type": "usb-c",       "command": "PLACEHOLDER_DDC_MONITOR1_LINUX" }
       }
     },
