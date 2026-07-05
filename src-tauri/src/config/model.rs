@@ -6,10 +6,21 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub device_name: String,
+    /// Port this machine's DeskMux API listens on. Default 3737.
+    #[serde(default = "default_api_port")]
+    pub api_port: u16,
+    /// When true, bind the API on all interfaces so LAN peers can reach it.
+    /// Default false — loopback only. Remote preset triggering is an attack surface.
+    #[serde(default)]
+    pub api_lan_access: bool,
     pub peers: Vec<Peer>,
     pub devices: Vec<Device>,
     pub monitors: Vec<Monitor>,
     pub presets: HashMap<String, Preset>,
+}
+
+fn default_api_port() -> u16 {
+    3737
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
