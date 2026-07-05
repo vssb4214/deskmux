@@ -64,11 +64,23 @@ pub(super) fn resolve_layout_entries(
                             device_id: device_id.clone(),
                         },
                     },
-                    Some(input) => ResolvedEntry::Ready(ResolvedCommand {
-                        monitor_id: monitor_id.clone(),
-                        device_id: device_id.clone(),
-                        action: BackendAction::Shell(input.command.clone()),
-                    }),
+                    Some(input) => match &input.command {
+                        Some(command) => ResolvedEntry::Ready(ResolvedCommand {
+                            monitor_id: monitor_id.clone(),
+                            device_id: device_id.clone(),
+                            action: BackendAction::Shell(command.clone()),
+                        }),
+                        // Native-only inputs aren't executable yet — the NativeDdc action and
+                        // platform-aware fallback land in a follow-up commit on this branch.
+                        None => ResolvedEntry::Failed {
+                            monitor_id: monitor_id.clone(),
+                            device_id: device_id.clone(),
+                            error: ResolutionError::NoBackendAvailable {
+                                monitor_id: monitor_id.clone(),
+                                device_id: device_id.clone(),
+                            },
+                        },
+                    },
                 },
             },
         )

@@ -54,6 +54,14 @@ pub enum ConfigError {
         preset_a: String,
         preset_b: String,
     },
+    InputMissingBackend {
+        monitor_id: String,
+        device_id: String,
+    },
+    NativeInputMissingDisplayId {
+        monitor_id: String,
+        device_id: String,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -136,6 +144,20 @@ impl fmt::Display for ConfigError {
             } => write!(
                 f,
                 "hotkeys assigns the same shortcut '{shortcut}' to presets '{preset_a}' and '{preset_b}'"
+            ),
+            ConfigError::InputMissingBackend {
+                monitor_id,
+                device_id,
+            } => write!(
+                f,
+                "monitor '{monitor_id}' input for device '{device_id}' has neither a command nor nativeDdc configured"
+            ),
+            ConfigError::NativeInputMissingDisplayId {
+                monitor_id,
+                device_id,
+            } => write!(
+                f,
+                "monitor '{monitor_id}' input for device '{device_id}' sets nativeDdc, but monitor '{monitor_id}' has no nativeDdc.displayId"
             ),
         }
     }

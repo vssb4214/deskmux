@@ -30,6 +30,12 @@ pub enum ResolutionError {
         monitor_id: String,
         device_id: String,
     },
+    /// The input exists but has no usable backend right now — e.g. no shell `command`, and
+    /// either no `nativeDdc` configured or native DDC isn't available on this build.
+    NoBackendAvailable {
+        monitor_id: String,
+        device_id: String,
+    },
 }
 
 impl fmt::Display for ResolutionError {
@@ -44,6 +50,13 @@ impl fmt::Display for ResolutionError {
             } => write!(
                 f,
                 "monitor '{monitor_id}' has no configured command for device '{device_id}'"
+            ),
+            ResolutionError::NoBackendAvailable {
+                monitor_id,
+                device_id,
+            } => write!(
+                f,
+                "monitor '{monitor_id}' has no usable backend for device '{device_id}'"
             ),
         }
     }
