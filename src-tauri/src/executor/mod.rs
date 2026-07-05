@@ -1,9 +1,11 @@
+mod backend;
 mod model;
 mod resolve;
 mod runner;
 
+use backend::{Backend, ShellBackend};
 use resolve::{preset_layout_entries, resolve_layout_entries, ResolvedEntry};
-use runner::{CommandRunner, ShellCommandRunner};
+use runner::ShellCommandRunner;
 
 pub use model::{ExecutorError, MonitorOutcome, MonitorResult, ResolutionError};
 pub use resolve::LayoutEntry;
@@ -20,7 +22,8 @@ pub fn apply_preset(
     preset_name: &str,
     dry_run: bool,
 ) -> Result<Vec<MonitorResult>, ExecutorError> {
-    apply_preset_with_runner(config, preset_name, dry_run, &ShellCommandRunner)
+    let shell = ShellCommandRunner;
+    apply_preset_with_backend(config, preset_name, dry_run, &ShellBackend::new(&shell))
 }
 
 /// Resolves and runs only the supplied layout entries. Resolution failures are returned
@@ -30,34 +33,35 @@ pub fn apply_layout_entries(
     entries: &[LayoutEntry],
     dry_run: bool,
 ) -> Vec<MonitorResult> {
-    apply_layout_entries_with_runner(config, entries, dry_run, &ShellCommandRunner)
+    let shell = ShellCommandRunner;
+    apply_layout_entries_with_backend(config, entries, dry_run, &ShellBackend::new(&shell))
 }
 
-fn apply_preset_with_runner(
+fn apply_preset_with_backend(
     config: &Config,
     preset_name: &str,
     dry_run: bool,
-    runner: &dyn CommandRunner,
+    backend: &dyn Backend,
 ) -> Result<Vec<MonitorResult>, ExecutorError> {
     let entries = preset_layout_entries(config, preset_name)?;
-    Ok(apply_layout_entries_with_runner(
-        config, &entries, dry_run, runner,
+    Ok(apply_layout_entries_with_backend(
+        config, &entries, dry_run, backend,
     ))
 }
 
-fn apply_layout_entries_with_runner(
+fn apply_layout_entries_with_backend(
     config: &Config,
     entries: &[LayoutEntry],
     dry_run: bool,
-    runner: &dyn CommandRunner,
+    backend: &dyn Backend,
 ) -> Vec<MonitorResult> {
     resolve_layout_entries(config, entries)
         .into_iter()
-        .map(|entry| run_entry(entry, dry_run, runner))
+        .map(|entry| run_entry(entry, dry_run, backend))
         .collect()
 }
 
-fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) -> MonitorResult {
+fn run_entry(entry: ResolvedEntry, dry_run: bool, backend: &dyn Backend) -> MonitorResult {
     let cmd = match entry {
         ResolvedEntry::Failed {
             monitor_id,
@@ -75,17 +79,19 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) ->
         ResolvedEntry::Ready(cmd) => cmd,
     };
 
+    let display_command = cmd.action.display_command();
+
     if dry_run {
         return MonitorResult {
             monitor_id: cmd.monitor_id,
             device_id: cmd.device_id,
-            command: Some(cmd.command),
+            command: Some(display_command),
             executed: false,
             outcome: MonitorOutcome::DryRun,
         };
     }
 
-    match runner.run(&cmd.command) {
+    match backend.execute(&cmd.action) {
         Ok(output) => {
             let outcome = if output.success {
                 MonitorOutcome::Success {
@@ -102,7 +108,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) ->
             MonitorResult {
                 monitor_id: cmd.monitor_id,
                 device_id: cmd.device_id,
-                command: Some(cmd.command),
+                command: Some(display_command),
                 executed: true,
                 outcome,
             }
@@ -110,7 +116,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) ->
         Err(e) => MonitorResult {
             monitor_id: cmd.monitor_id,
             device_id: cmd.device_id,
-            command: Some(cmd.command),
+            command: Some(display_command),
             executed: true,
             outcome: MonitorOutcome::SpawnFailed {
                 message: e.to_string(),
@@ -122,17 +128,18 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::backend::BackendAction;
     use crate::executor::runner::CommandOutput;
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::io;
 
-    struct MockCommandRunner {
+    struct MockBackend {
         responses: RefCell<VecDeque<io::Result<CommandOutput>>>,
         calls: RefCell<Vec<String>>,
     }
 
-    impl MockCommandRunner {
+    impl MockBackend {
         fn new(responses: Vec<io::Result<CommandOutput>>) -> Self {
             Self {
                 responses: RefCell::new(responses.into()),
@@ -145,9 +152,9 @@ mod tests {
         }
     }
 
-    impl CommandRunner for MockCommandRunner {
-        fn run(&self, command: &str) -> io::Result<CommandOutput> {
-            self.calls.borrow_mut().push(command.to_string());
+    impl Backend for MockBackend {
+        fn execute(&self, action: &BackendAction) -> io::Result<CommandOutput> {
+            self.calls.borrow_mut().push(action.display_command());
             self.responses
                 .borrow_mut()
                 .pop_front()
@@ -223,10 +230,10 @@ mod tests {
     #[test]
     fn apply_layout_entries_only_runs_filtered_monitors() {
         let config = fixture_config();
-        let mock = MockCommandRunner::new(vec![success("ok")]);
+        let mock = MockBackend::new(vec![success("ok")]);
         let entries = vec![("monitor1".to_string(), "device-a".to_string())];
 
-        let results = apply_layout_entries_with_runner(&config, &entries, false, &mock);
+        let results = apply_layout_entries_with_backend(&config, &entries, false, &mock);
 
         assert_eq!(mock.call_count(), 1);
         assert_eq!(results.len(), 1);
@@ -236,10 +243,10 @@ mod tests {
     #[test]
     fn dry_run_never_spawns_a_process() {
         let config = fixture_config();
-        let mock = MockCommandRunner::new(vec![]);
+        let mock = MockBackend::new(vec![]);
 
-        let results =
-            apply_preset_with_runner(&config, "valid_preset", true, &mock).expect("should resolve");
+        let results = apply_preset_with_backend(&config, "valid_preset", true, &mock)
+            .expect("should resolve");
 
         assert_eq!(mock.call_count(), 0);
         assert!(results
@@ -250,10 +257,10 @@ mod tests {
     #[test]
     fn valid_preset_resolves_to_expected_commands() {
         let config = fixture_config();
-        let mock = MockCommandRunner::new(vec![]);
+        let mock = MockBackend::new(vec![]);
 
-        let results =
-            apply_preset_with_runner(&config, "valid_preset", true, &mock).expect("should resolve");
+        let results = apply_preset_with_backend(&config, "valid_preset", true, &mock)
+            .expect("should resolve");
 
         assert_eq!(
             results
@@ -270,9 +277,9 @@ mod tests {
     #[test]
     fn unknown_preset_name_bubbles_up_as_executor_error() {
         let config = fixture_config();
-        let mock = MockCommandRunner::new(vec![]);
+        let mock = MockBackend::new(vec![]);
 
-        let result = apply_preset_with_runner(&config, "does-not-exist", false, &mock);
+        let result = apply_preset_with_backend(&config, "does-not-exist", false, &mock);
 
         assert_eq!(
             result.unwrap_err(),
@@ -285,9 +292,9 @@ mod tests {
     #[test]
     fn resolution_failure_is_a_structured_result_not_a_panic() {
         let config = fixture_config();
-        let mock = MockCommandRunner::new(vec![]);
+        let mock = MockBackend::new(vec![]);
 
-        let results = apply_preset_with_runner(&config, "unknown_monitor_preset", false, &mock)
+        let results = apply_preset_with_backend(&config, "unknown_monitor_preset", false, &mock)
             .expect("resolution failures are reported per-entry, not a top-level error");
 
         assert_eq!(mock.call_count(), 0);
@@ -310,9 +317,9 @@ mod tests {
     #[test]
     fn mixed_result_preset_reports_each_entry_independently() {
         let config = fixture_config();
-        let mock = MockCommandRunner::new(vec![success("ok"), failure(1, "nope")]);
+        let mock = MockBackend::new(vec![success("ok"), failure(1, "nope")]);
 
-        let results = apply_preset_with_runner(&config, "mixed_preset", false, &mock)
+        let results = apply_preset_with_backend(&config, "mixed_preset", false, &mock)
             .expect("should resolve");
 
         assert_eq!(mock.call_count(), 2);

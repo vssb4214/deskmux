@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::backend::BackendAction;
 use super::model::{ExecutorError, ResolutionError};
 use crate::config::Config;
 
@@ -7,7 +8,7 @@ use crate::config::Config;
 pub(super) struct ResolvedCommand {
     pub monitor_id: String,
     pub device_id: String,
-    pub command: String,
+    pub action: BackendAction,
 }
 
 #[derive(Debug, PartialEq)]
@@ -66,7 +67,7 @@ pub(super) fn resolve_layout_entries(
                     Some(input) => ResolvedEntry::Ready(ResolvedCommand {
                         monitor_id: monitor_id.clone(),
                         device_id: device_id.clone(),
-                        command: input.command.clone(),
+                        action: BackendAction::Shell(input.command.clone()),
                     }),
                 },
             },
@@ -155,12 +156,12 @@ mod tests {
                 ResolvedEntry::Ready(ResolvedCommand {
                     monitor_id: "monitor1".to_string(),
                     device_id: "device-a".to_string(),
-                    command: "cmd-monitor1-a".to_string(),
+                    action: BackendAction::Shell("cmd-monitor1-a".to_string()),
                 }),
                 ResolvedEntry::Ready(ResolvedCommand {
                     monitor_id: "monitor2".to_string(),
                     device_id: "device-b".to_string(),
-                    command: "cmd-monitor2-b".to_string(),
+                    action: BackendAction::Shell("cmd-monitor2-b".to_string()),
                 }),
             ]
         );
@@ -178,7 +179,7 @@ mod tests {
             vec![ResolvedEntry::Ready(ResolvedCommand {
                 monitor_id: "monitor1".to_string(),
                 device_id: "device-a".to_string(),
-                command: "cmd-monitor1-a".to_string(),
+                action: BackendAction::Shell("cmd-monitor1-a".to_string()),
             })]
         );
     }
