@@ -20,28 +20,20 @@ pub(super) enum ResolvedEntry {
     },
 }
 
-/// Looks up `preset_name` and resolves every monitorId -> deviceId entry in its layout to a
-/// command. Entries are ordered by the monitor's `order` field (unresolvable monitors sort last)
-/// so execution is deterministic. Pure: no I/O, no process spawning.
-pub(super) fn resolve_preset(
+/// A preset layout entry to resolve: `(monitorId, deviceId)`.
+pub type LayoutEntry = (String, String);
+
+/// Resolves only the supplied layout entries to commands. Entries are ordered by the
+/// monitor's `order` field (unknown monitors sort last). Pure: no I/O.
+pub(super) fn resolve_layout_entries(
     config: &Config,
-    preset_name: &str,
-) -> Result<Vec<ResolvedEntry>, ExecutorError> {
-    let preset = config
-        .presets
-        .get(preset_name)
-        .ok_or_else(|| ExecutorError::PresetNotFound {
-            preset_name: preset_name.to_string(),
-        })?;
+    entries: &[LayoutEntry],
+) -> Vec<ResolvedEntry> {
+    let monitors_by_id: HashMap<&str, _> =
+        config.monitors.iter().map(|m| (m.id.as_str(), m)).collect();
 
-    let monitors_by_id = config
-        .monitors
-        .iter()
-        .map(|m| (m.id.as_str(), m))
-        .collect::<HashMap<_, _>>();
-
-    let mut entries: Vec<(&String, &String)> = preset.layout.iter().collect();
-    entries.sort_by(|(a_id, _), (b_id, _)| {
+    let mut sorted: Vec<&LayoutEntry> = entries.iter().collect();
+    sorted.sort_by(|(a_id, _), (b_id, _)| {
         let a_order = monitors_by_id
             .get(a_id.as_str())
             .map_or(u32::MAX, |m| m.order);
@@ -51,7 +43,7 @@ pub(super) fn resolve_preset(
         a_order.cmp(&b_order).then_with(|| a_id.cmp(b_id))
     });
 
-    let resolved = entries
+    sorted
         .into_iter()
         .map(
             |(monitor_id, device_id)| match monitors_by_id.get(monitor_id.as_str()) {
@@ -79,9 +71,26 @@ pub(super) fn resolve_preset(
                 },
             },
         )
-        .collect();
+        .collect()
+}
 
-    Ok(resolved)
+/// Returns the layout entries for `preset_name`.
+pub(super) fn preset_layout_entries(
+    config: &Config,
+    preset_name: &str,
+) -> Result<Vec<LayoutEntry>, ExecutorError> {
+    let preset = config
+        .presets
+        .get(preset_name)
+        .ok_or_else(|| ExecutorError::PresetNotFound {
+            preset_name: preset_name.to_string(),
+        })?;
+
+    Ok(preset
+        .layout
+        .iter()
+        .map(|(monitor_id, device_id)| (monitor_id.clone(), device_id.clone()))
+        .collect())
 }
 
 #[cfg(test)]
@@ -137,7 +146,8 @@ mod tests {
     fn resolves_entries_in_monitor_order() {
         let config = fixture_config();
 
-        let resolved = resolve_preset(&config, "valid_preset").expect("should resolve");
+        let entries = preset_layout_entries(&config, "valid_preset").expect("should resolve");
+        let resolved = resolve_layout_entries(&config, &entries);
 
         assert_eq!(
             resolved,
@@ -157,10 +167,44 @@ mod tests {
     }
 
     #[test]
+    fn resolve_layout_entries_only_resolves_supplied_entries() {
+        let config = fixture_config();
+        let entries = vec![("monitor1".to_string(), "device-a".to_string())];
+
+        let resolved = resolve_layout_entries(&config, &entries);
+
+        assert_eq!(
+            resolved,
+            vec![ResolvedEntry::Ready(ResolvedCommand {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-a".to_string(),
+                command: "cmd-monitor1-a".to_string(),
+            })]
+        );
+    }
+
+    #[test]
+    fn filtered_resolve_does_not_touch_unlisted_monitors() {
+        let config = fixture_config();
+        let entries = vec![("monitor1".to_string(), "device-a".to_string())];
+
+        let resolved = resolve_layout_entries(&config, &entries);
+
+        assert!(!resolved.iter().any(|entry| match entry {
+            ResolvedEntry::Failed { monitor_id, .. }
+            | ResolvedEntry::Ready(ResolvedCommand { monitor_id, .. }) => {
+                monitor_id == "ghost-monitor"
+            }
+        }));
+    }
+
+    #[test]
     fn unknown_monitor_in_layout_is_a_resolution_error() {
         let config = fixture_config();
 
-        let resolved = resolve_preset(&config, "unknown_monitor_preset").expect("should resolve");
+        let entries =
+            preset_layout_entries(&config, "unknown_monitor_preset").expect("should resolve");
+        let resolved = resolve_layout_entries(&config, &entries);
 
         assert_eq!(
             resolved,
@@ -178,7 +222,9 @@ mod tests {
     fn device_with_no_input_is_a_resolution_error() {
         let config = fixture_config();
 
-        let resolved = resolve_preset(&config, "unknown_device_preset").expect("should resolve");
+        let entries =
+            preset_layout_entries(&config, "unknown_device_preset").expect("should resolve");
+        let resolved = resolve_layout_entries(&config, &entries);
 
         assert_eq!(
             resolved,
@@ -197,7 +243,7 @@ mod tests {
     fn unknown_preset_name_is_an_executor_error() {
         let config = fixture_config();
 
-        let result = resolve_preset(&config, "does-not-exist");
+        let result = preset_layout_entries(&config, "does-not-exist");
 
         assert_eq!(
             result.unwrap_err(),
