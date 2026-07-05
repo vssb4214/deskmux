@@ -24,7 +24,7 @@ fn select_action(
             return Some(BackendAction::NativeDdc {
                 display_id: monitor_native.display_id.clone(),
                 vcp_code: VCP_INPUT_SOURCE,
-                value: u16::from(input_native.input_source_value),
+                value: input_native.input_source_value,
             });
         }
     }
@@ -335,6 +335,49 @@ mod tests {
                 })
             )));
         }
+    }
+
+    /// Real monitors report VCP 0x60 input-source values well above 255 (e.g. 4626, 4623).
+    /// This must survive config parse → resolution → `BackendAction::NativeDdc` intact.
+    #[test]
+    fn native_ddc_input_preserves_large_input_source_value() {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [{ "id": "device-a", "label": "Device A" }],
+            "monitors": [{
+                "id": "monitor1",
+                "label": "Monitor 1",
+                "order": 0,
+                "nativeDdc": { "displayId": "K@P:d0e5:0" },
+                "inputs": {
+                    "device-a": {
+                        "type": "displayport",
+                        "nativeDdc": { "inputSourceValue": 4626 }
+                    }
+                }
+            }],
+            "presets": {
+                "desktop": { "label": "Desktop", "layout": { "monitor1": "device-a" } }
+            }
+        }"#;
+        let config: Config =
+            serde_json::from_str(json).expect("large inputSourceValue should parse");
+        let entries = preset_layout_entries(&config, "desktop").expect("should resolve");
+        let resolved = resolve_layout_entries(&config, &entries, true);
+
+        assert_eq!(
+            resolved,
+            vec![ResolvedEntry::Ready(ResolvedCommand {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-a".to_string(),
+                action: BackendAction::NativeDdc {
+                    display_id: "K@P:d0e5:0".to_string(),
+                    vcp_code: 0x60,
+                    value: 4626,
+                },
+            })]
+        );
     }
 
     #[test]
