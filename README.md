@@ -14,8 +14,8 @@ If you run two machines into the same set of monitors, switching "who's driving 
 
 - **Preset switching** — define layouts once (All PC, All Mac, splits, custom) and apply them with one click.
 - **Config-driven** — monitors, inputs, and switch commands live in `deskmux.config.json`. Nothing about your hardware is baked into the code.
-- **Dry-run mode** — see exactly which commands would fire before anything touches your monitors.
-- **Local API** — `/health`, `/status`, and preset application over HTTP, so the two machines can coordinate over your LAN.
+- **Dry-run mode** — enabled by default in the dashboard; preview resolved commands before anything runs. Uncheck to execute.
+- **Local API + LAN coordination** — `/health`, `/status`, and coordinated preset apply over HTTP (`controlledBy`, peer fan-out). No auth yet; LAN bind is opt-in.
 - **Execution logs** — every command's stdout/stderr surfaces in the UI so failures are obvious.
 
 ## Requirements
@@ -47,9 +47,12 @@ Each monitor declares its inputs and the shell command that selects each input. 
 
 ## Usage
 
-1. Start DeskMux on each machine. It loads `deskmux.config.json` and serves the dashboard on port `3737`.
-2. Toggle **Dry run** if you want to preview commands first.
-3. Click a preset. DeskMux resolves the layout, runs the configured command for each monitor, and logs the result.
+1. Start DeskMux on each machine. It loads `deskmux.config.json` and serves the local HTTP API (default port `3737`; the dashboard discovers the URL automatically).
+2. **Dry run** is checked by default — apply a preset to preview resolved commands without executing them.
+3. Uncheck **Dry run — preview commands only** when you are ready to switch monitor inputs, then apply a preset.
+4. Results (local, peer, and planning errors) appear in the dashboard; `lastAppliedPreset` updates only after a non-dry-run full success.
+
+Config is still edited by hand in `deskmux.config.json` — in-app config editing is not implemented yet.
 
 ## Limitations
 
@@ -65,9 +68,11 @@ Phased so every step is a usable tool on its own. Full detail in [`docs/ROADMAP.
 
 **Now — monitor switching foundation**
 - [x] Config model, loader, validation
-- [ ] Preset executor + dry-run
-- [ ] Dashboard UI (apply presets, add/remove/reorder machines & monitors)
-- [ ] Local API + LAN peer coordination
+- [x] Preset executor + dry-run
+- [x] Local HTTP API + LAN peer coordination
+- [x] Dashboard apply/status UI (dry-run on by default)
+- [ ] Dashboard config editing (machines, monitors, presets in UI)
+- [ ] Live logs / richer execution history
 
 **Next — make it standalone**
 - [ ] Native DDC/CI support (no external monitor tool required), with the shell-command path kept as an escape hatch for quirky displays
@@ -88,7 +93,7 @@ Software monitor-switching over DDC/CI is well-trodden. The closest project is [
 DeskMux isn't trying to reinvent DDC switching — that part isn't novel. The intended difference is in the packaging and the layouts:
 
 - **Arbitrary layouts, not one-way follow.** Most existing switchers move *all* monitors together when you press a USB switch. DeskMux is preset-driven: monitor 1 on machine A while monitor 2 is on machine B, any split, any number of machines and monitors, applied from a dashboard.
-- **A real GUI with add/remove/reorder** — no hand-editing `.ini` files or reverse-engineering DDC hex codes as your only interface.
+- **A dashboard for apply/status today** — preset apply, dry-run, and structured results are in the UI. Adding/removing machines and monitors still means editing `deskmux.config.json` for now.
 - **Aiming to be dependency-free** once native DDC lands, so there's nothing else to install.
 
 The peripheral-sharing goal is deliberately honest: the near-term path is integrating existing software sharing rather than claiming a from-scratch engine, and the design leans on the LAN transport (Ethernet-preferred, lean protocol) as the place to actually improve latency. See [`docs/ROADMAP.md`](docs/ROADMAP.md).

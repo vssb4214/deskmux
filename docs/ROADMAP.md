@@ -2,14 +2,19 @@
 
 DeskMux is built in phases so that every phase is a genuinely usable tool, not a half-finished everything. The ordering is deliberate: ship the part that works reliably today, make it standalone, and only then take on the much larger peripheral-sharing problem.
 
-## Phase 1 — Monitor switching foundation (in progress)
+## Phase 1 — Monitor switching foundation
+
+Core switching, API, coordination, and dashboard apply/status are done. Config editing in the UI and richer logs remain.
 
 - [x] Config data model (machines, monitors, inputs, presets — all dynamic, any count)
 - [x] Config loader with validation and human-readable errors
-- [ ] Preset executor: resolve a preset's layout to per-monitor commands, run them, capture stdout/stderr
-- [ ] Dry-run mode: print exactly what would run without executing
-- [ ] Dashboard UI: apply presets; add / remove / reorder machines and monitors; edit presets; live logs
-- [ ] Local HTTP API (`/health`, `/status`, `POST /apply-preset`) and LAN peer coordination
+- [x] Preset executor: resolve a preset's layout to per-monitor commands, run them, capture stdout/stderr
+- [x] Dry-run mode: resolve and report commands without executing
+- [x] Local HTTP API (`/health`, `/status`, `POST /apply-preset`)
+- [x] LAN peer coordination (`controlledBy`, coordinated apply, peer fan-out)
+- [x] Dashboard UI: load status, apply presets (dry-run on by default), structured apply results
+- [ ] Dashboard UI: add / remove / reorder machines and monitors; edit presets in UI
+- [ ] Live logs / richer execution history in the dashboard
 
 This phase depends on an external monitor-control tool (ControlMyMonitor / ddcutil / BetterDisplay / Lunar) via configured shell commands.
 
