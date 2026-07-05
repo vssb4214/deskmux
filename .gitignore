@@ -20,4 +20,5 @@ src-tauri/gen/schemas/
 !.vscode/extensions.json
 .idea/
 .claude/
+.cursor/
 Thumbs.db
