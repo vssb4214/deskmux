@@ -141,19 +141,20 @@ mod tests {
 
     #[tokio::test]
     async fn client_health_returns_config_loaded_flag() {
-        let (addr, server) = spawn_test_server(AppState::new(Some(test_config()))).await;
+        let (addr, server) = spawn_test_server(AppState::from_load_result(Ok(test_config()))).await;
         let client = PeerClient::new("127.0.0.1", addr.port());
 
         let health = client.health().await.expect("health should succeed");
 
         assert_eq!(health.status, "ok");
         assert!(health.config_loaded);
+        assert!(health.config_error.is_none());
         server.abort();
     }
 
     #[tokio::test]
     async fn client_apply_preset_dry_run() {
-        let (addr, server) = spawn_test_server(AppState::new(Some(test_config()))).await;
+        let (addr, server) = spawn_test_server(AppState::from_load_result(Ok(test_config()))).await;
         let client = PeerClient::new("127.0.0.1", addr.port());
 
         let response = client
@@ -169,7 +170,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_surfaces_http_errors() {
-        let (addr, server) = spawn_test_server(AppState::new(Some(test_config()))).await;
+        let (addr, server) = spawn_test_server(AppState::from_load_result(Ok(test_config()))).await;
         let client = PeerClient::new("127.0.0.1", addr.port());
 
         let err = client
