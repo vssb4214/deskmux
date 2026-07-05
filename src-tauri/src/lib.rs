@@ -5,6 +5,8 @@ mod config;
 pub mod executor;
 mod hotkeys;
 pub mod orchestrator;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod tray;
 
 pub use api::{PeerClient, PeerClientError};
 pub use bootstrap::BootstrapState;
@@ -33,8 +35,10 @@ pub fn run() {
             let app_state = Arc::new(AppState::from_load_result(config_result));
             let api_base_url = api_base_url_from_config(app_state.config.as_ref());
             app.manage(BootstrapState { api_base_url });
-            // Start the API even when config failed: /health stays up with configLoaded=false;
-            // /status and /apply-preset return 503 until a valid config is loaded.
+
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            tray::init(app.handle(), app_state.clone())?;
+
             api::spawn_server(app_state);
             Ok(())
         })
