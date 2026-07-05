@@ -31,6 +31,15 @@ pub fn validate(config: &Config) -> Result<(), ConfigErrors> {
     }
 
     for monitor in &config.monitors {
+        if let Some(controlled_by) = &monitor.controlled_by {
+            if !device_ids.contains(controlled_by.as_str()) {
+                errors.push(ConfigError::UnknownControlledBy {
+                    monitor_id: monitor.id.clone(),
+                    controlled_by: controlled_by.clone(),
+                });
+            }
+        }
+
         for device_id in monitor.inputs.keys() {
             if !device_ids.contains(device_id.as_str()) {
                 errors.push(ConfigError::UnknownDeviceInMonitorInput {
@@ -38,6 +47,26 @@ pub fn validate(config: &Config) -> Result<(), ConfigErrors> {
                     device_id: device_id.clone(),
                 });
             }
+        }
+
+        if monitor.controlled_by(&config.device_name) == config.device_name.as_str()
+            && monitor.inputs.is_empty()
+        {
+            errors.push(ConfigError::LocallyOwnedMonitorMissingInputs {
+                monitor_id: monitor.id.clone(),
+            });
+        }
+    }
+
+    for peer in &config.peers {
+        if !device_ids.contains(peer.name.as_str()) {
+            errors.push(ConfigError::PeerNameNotFound {
+                peer_name: peer.name.clone(),
+            });
+        } else if peer.name == config.device_name {
+            errors.push(ConfigError::PeerNameIsLocalDevice {
+                peer_name: peer.name.clone(),
+            });
         }
     }
 
@@ -60,7 +89,12 @@ pub fn validate(config: &Config) -> Result<(), ConfigErrors> {
                     monitor_id: monitor_id.clone(),
                     device_id: device_id.clone(),
                 });
-            } else if !monitor.inputs.contains_key(device_id.as_str()) {
+                continue;
+            }
+
+            if monitor.controlled_by(&config.device_name) == config.device_name.as_str()
+                && !monitor.inputs.contains_key(device_id.as_str())
+            {
                 errors.push(ConfigError::DeviceNotInputForMonitor {
                     preset_name: preset_name.clone(),
                     monitor_id: monitor_id.clone(),
@@ -127,6 +161,7 @@ mod tests {
                 id: "monitor1".to_string(),
                 label: "Monitor 1".to_string(),
                 order: 0,
+                controlled_by: None,
                 inputs,
             }],
             presets,
@@ -136,6 +171,35 @@ mod tests {
     #[test]
     fn valid_config_passes() {
         assert!(validate(&valid_config()).is_ok());
+    }
+
+    #[test]
+    fn controlled_by_defaults_to_device_name_via_helper() {
+        let config = valid_config();
+        assert_eq!(
+            config.monitors[0].controlled_by(&config.device_name),
+            "device-a"
+        );
+    }
+
+    #[test]
+    fn remote_stub_monitor_without_inputs_passes() {
+        let mut config = valid_config();
+        config.monitors.push(Monitor {
+            id: "monitor2".to_string(),
+            label: "Monitor 2".to_string(),
+            order: 1,
+            controlled_by: Some("device-b".to_string()),
+            inputs: HashMap::new(),
+        });
+        config
+            .presets
+            .get_mut("all_a")
+            .unwrap()
+            .layout
+            .insert("monitor2".to_string(), "device-b".to_string());
+
+        assert!(validate(&config).is_ok());
     }
 
     #[test]
@@ -210,6 +274,64 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_controlled_by() {
+        let mut config = valid_config();
+        config.monitors[0].controlled_by = Some("ghost".to_string());
+
+        let errors = validate(&config).unwrap_err();
+
+        assert_eq!(
+            errors.0,
+            vec![ConfigError::UnknownControlledBy {
+                monitor_id: "monitor1".to_string(),
+                controlled_by: "ghost".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rejects_locally_owned_monitor_without_inputs() {
+        let mut config = valid_config();
+        config.monitors[0].inputs.clear();
+
+        let errors = validate(&config).unwrap_err();
+
+        assert!(errors.0.contains(&ConfigError::LocallyOwnedMonitorMissingInputs {
+            monitor_id: "monitor1".to_string(),
+        }));
+    }
+
+    #[test]
+    fn rejects_peer_name_not_in_devices() {
+        let mut config = valid_config();
+        config.peers[0].name = "ghost".to_string();
+
+        let errors = validate(&config).unwrap_err();
+
+        assert_eq!(
+            errors.0,
+            vec![ConfigError::PeerNameNotFound {
+                peer_name: "ghost".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rejects_peer_name_equal_to_device_name() {
+        let mut config = valid_config();
+        config.peers[0].name = "device-a".to_string();
+
+        let errors = validate(&config).unwrap_err();
+
+        assert_eq!(
+            errors.0,
+            vec![ConfigError::PeerNameIsLocalDevice {
+                peer_name: "device-a".to_string(),
+            }]
+        );
+    }
+
+    #[test]
     fn rejects_unknown_monitor_in_preset_layout() {
         let mut config = valid_config();
         config
@@ -253,9 +375,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_device_not_declared_as_monitor_input() {
+    fn rejects_device_not_declared_as_monitor_input_for_locally_owned_monitor() {
         let mut config = valid_config();
-        // device-b exists in devices[] but monitor1 never declared an input for it.
         config
             .presets
             .get_mut("all_a")
@@ -273,6 +394,26 @@ mod tests {
                 device_id: "device-b".to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn allows_remote_owned_preset_without_local_input() {
+        let mut config = valid_config();
+        config.monitors.push(Monitor {
+            id: "monitor2".to_string(),
+            label: "Monitor 2".to_string(),
+            order: 1,
+            controlled_by: Some("device-b".to_string()),
+            inputs: HashMap::new(),
+        });
+        config
+            .presets
+            .get_mut("all_a")
+            .unwrap()
+            .layout
+            .insert("monitor2".to_string(), "device-b".to_string());
+
+        assert!(validate(&config).is_ok());
     }
 
     #[test]
