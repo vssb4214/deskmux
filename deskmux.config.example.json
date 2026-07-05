@@ -1,5 +1,7 @@
 {
   "deviceName": "windows-pc",
+  "apiPort": 3737,
+  "apiLanAccess": false,
   "peers": [
     { "name": "mac-mini", "host": "192.168.1.50", "port": 3737 },
     { "name": "linux-box", "host": "192.168.1.51", "port": 3737 }
