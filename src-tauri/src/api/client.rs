@@ -61,11 +61,13 @@ impl PeerClient {
         &self,
         preset: &str,
         dry_run: bool,
+        local_only: bool,
     ) -> Result<ApplyPresetResponse, PeerClientError> {
         let url = format!("{}/apply-preset", self.base_url);
         let body = ApplyPresetRequest {
             preset: preset.to_string(),
             dry_run,
+            local_only,
         };
         let response = self
             .http
@@ -159,13 +161,13 @@ mod tests {
         let client = PeerClient::new("127.0.0.1", addr.port());
 
         let response = client
-            .apply_preset("all_a", true)
+            .apply_preset("all_a", true, true)
             .await
             .expect("apply-preset should succeed");
 
         assert_eq!(response.preset, "all_a");
         assert!(response.dry_run);
-        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.local_results.len(), 1);
         server.abort();
     }
 
@@ -175,7 +177,7 @@ mod tests {
         let client = PeerClient::new("127.0.0.1", addr.port());
 
         let err = client
-            .apply_preset("missing", false)
+            .apply_preset("missing", false, true)
             .await
             .expect_err("unknown preset should fail");
 

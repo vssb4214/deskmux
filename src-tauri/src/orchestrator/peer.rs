@@ -32,9 +32,9 @@ impl PeerApplyClient for PeerClientAdapter {
         dry_run: bool,
     ) -> Result<PeerApplyResponse, PeerClientError> {
         let client = crate::api::PeerClient::new(host, port);
-        let response = client.apply_preset(preset, dry_run).await?;
+        let response = client.apply_preset(preset, dry_run, true).await?;
         Ok(PeerApplyResponse {
-            local_results: response.results,
+            local_results: response.local_results,
         })
     }
 }
