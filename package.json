@@ -1,0 +1,14 @@
+{
+  "name": "deskmux",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "lint": "node scripts/check-js.mjs",
+    "test": "node --test test/summary.test.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

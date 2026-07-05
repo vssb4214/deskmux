@@ -1,0 +1,330 @@
+/** @typedef {import('../types.js').StatusResponse} StatusResponse */
+/** @typedef {import('../types.js').ApplyPresetResponse} ApplyPresetResponse */
+/** @typedef {import('../types.js').MonitorResult} MonitorResult */
+/** @typedef {import('../types.js').PeerApplyOutcome} PeerApplyOutcome */
+/** @typedef {import('../types.js').MonitorOutcome} MonitorOutcome */
+/** @typedef {import('../types.js').PlanningError} PlanningError */
+
+import {
+  classifyApplyResult,
+  summaryBannerText,
+} from '../lib/summary.js';
+
+/**
+ * @param {MonitorOutcome} outcome
+ */
+export function outcomeLabel(outcome) {
+  switch (outcome.type) {
+    case 'dryRun':
+      return 'Dry run';
+    case 'success':
+      return 'Success';
+    case 'failed':
+      return 'Failed';
+    case 'spawnFailed':
+      return 'Spawn failed';
+    case 'resolutionFailed':
+      return 'Resolution failed';
+    default:
+      return 'Unknown';
+  }
+}
+
+/**
+ * @param {MonitorOutcome} outcome
+ */
+function outcomeClass(outcome) {
+  if (outcome.type === 'dryRun') {
+    return 'badge badge-info';
+  }
+  if (outcome.type === 'success') {
+    return 'badge badge-ok';
+  }
+  return 'badge badge-error';
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string | null} message
+ * @param {'error' | 'warning' | 'info'} kind
+ */
+export function renderBanner(container, message, kind) {
+  container.hidden = !message;
+  container.textContent = message ?? '';
+  container.className = `banner banner-${kind}`;
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {StatusResponse} status
+ */
+export function renderStatus(container, status) {
+  container.innerHTML = '';
+
+  const device = document.createElement('p');
+  device.className = 'meta-line';
+  device.innerHTML = `<strong>Device</strong> ${escapeHtml(status.deviceName)}`;
+  container.appendChild(device);
+
+  const last = document.createElement('p');
+  last.className = 'meta-line';
+  const lastText = status.lastAppliedPreset ?? 'None';
+  last.innerHTML = `<strong>Last applied preset</strong> ${escapeHtml(lastText)}`;
+  container.appendChild(last);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {StatusResponse['monitors']} monitors
+ */
+export function renderMonitors(container, monitors) {
+  container.innerHTML = '';
+  if (monitors.length === 0) {
+    container.textContent = 'No monitors configured.';
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'item-list';
+  for (const monitor of [...monitors].sort(
+    (a, b) => a.order - b.order || a.id.localeCompare(b.id),
+  )) {
+    const item = document.createElement('li');
+    item.textContent = `${monitor.label} (${monitor.id})`;
+    list.appendChild(item);
+  }
+  container.appendChild(list);
+}
+
+/**
+ * @param {HTMLSelectElement} select
+ * @param {StatusResponse['presets']} presets
+ */
+export function renderPresetOptions(select, presets) {
+  select.innerHTML = '';
+  const sorted = [...presets].sort((a, b) => a.name.localeCompare(b.name));
+  for (const preset of sorted) {
+    const option = document.createElement('option');
+    option.value = preset.name;
+    option.textContent = `${preset.label} (${preset.name})`;
+    select.appendChild(option);
+  }
+  select.disabled = sorted.length === 0;
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {ApplyPresetResponse} response
+ */
+export function renderApplyResult(container, response) {
+  container.hidden = false;
+  container.innerHTML = '';
+
+  const summaryClass = classifyApplyResult(response);
+  const banner = document.createElement('div');
+  banner.className = `result-banner result-${summaryClass}`;
+  banner.textContent = summaryBannerText(summaryClass);
+  container.appendChild(banner);
+
+  if (response.planningErrors.length > 0) {
+    container.appendChild(
+      renderSection('Planning errors', renderPlanningErrors(response.planningErrors)),
+    );
+  }
+
+  if (response.localResults.length > 0) {
+    container.appendChild(
+      renderSection('Local results', renderMonitorResults(response.localResults)),
+    );
+  }
+
+  if (response.peerResults.length > 0) {
+    container.appendChild(
+      renderSection('Peer results', renderPeerResults(response.peerResults, 0)),
+    );
+  }
+}
+
+/**
+ * @param {string} title
+ * @param {HTMLElement} body
+ */
+function renderSection(title, body) {
+  const section = document.createElement('section');
+  section.className = 'result-section';
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  section.appendChild(heading);
+  section.appendChild(body);
+  return section;
+}
+
+/**
+ * @param {PlanningError[]} errors
+ */
+function renderPlanningErrors(errors) {
+  const list = document.createElement('ul');
+  list.className = 'item-list';
+  for (const error of errors) {
+    const item = document.createElement('li');
+    item.textContent = `Unknown monitor: ${error.monitorId}`;
+    list.appendChild(item);
+  }
+  return list;
+}
+
+/**
+ * @param {MonitorResult[]} results
+ */
+function renderMonitorResults(results) {
+  const wrap = document.createElement('div');
+  wrap.className = 'result-cards';
+  for (const result of results) {
+    wrap.appendChild(renderMonitorCard(result));
+  }
+  return wrap;
+}
+
+/**
+ * @param {MonitorResult} result
+ */
+function renderMonitorCard(result) {
+  const card = document.createElement('article');
+  card.className = 'result-card';
+
+  const header = document.createElement('div');
+  header.className = 'result-card-header';
+  const title = document.createElement('strong');
+  title.textContent = `${result.monitorId} → ${result.deviceId}`;
+  const badge = document.createElement('span');
+  badge.className = outcomeClass(result.outcome);
+  badge.textContent = outcomeLabel(result.outcome);
+  header.appendChild(title);
+  header.appendChild(badge);
+  card.appendChild(header);
+
+  if (result.command) {
+    const command = document.createElement('p');
+    command.className = 'command-line';
+    command.textContent = result.command;
+    card.appendChild(command);
+  }
+
+  appendOutcomeDetails(card, result.outcome);
+  return card;
+}
+
+/**
+ * @param {HTMLElement} card
+ * @param {MonitorOutcome} outcome
+ */
+function appendOutcomeDetails(card, outcome) {
+  if (outcome.type === 'success' || outcome.type === 'failed') {
+    if (outcome.stdout) {
+      card.appendChild(detailBlock('stdout', outcome.stdout));
+    }
+    if (outcome.stderr) {
+      card.appendChild(detailBlock('stderr', outcome.stderr));
+    }
+    if (outcome.type === 'failed' && outcome.exitCode != null) {
+      const code = document.createElement('p');
+      code.className = 'meta-line';
+      code.textContent = `Exit code: ${outcome.exitCode}`;
+      card.appendChild(code);
+    }
+  } else if (outcome.type === 'spawnFailed') {
+    card.appendChild(detailBlock('error', outcome.message));
+  } else if (outcome.type === 'resolutionFailed') {
+    card.appendChild(detailBlock('error', JSON.stringify(outcome.error)));
+  }
+}
+
+/**
+ * @param {string} label
+ * @param {string} text
+ */
+function detailBlock(label, text) {
+  const block = document.createElement('details');
+  block.className = 'detail-block';
+  const summary = document.createElement('summary');
+  summary.textContent = label;
+  const pre = document.createElement('pre');
+  pre.textContent = text;
+  block.appendChild(summary);
+  block.appendChild(pre);
+  return block;
+}
+
+/**
+ * @param {PeerApplyOutcome[]} peers
+ * @param {number} depth
+ */
+function renderPeerResults(peers, depth) {
+  const wrap = document.createElement('div');
+  wrap.className = 'peer-results';
+  wrap.style.marginLeft = depth > 0 ? `${depth * 1.25}rem` : '0';
+
+  for (const peer of peers) {
+    const block = document.createElement('article');
+    block.className = 'result-card peer-card';
+
+    const header = document.createElement('div');
+    header.className = 'result-card-header';
+    const title = document.createElement('strong');
+    title.textContent = `Peer ${peer.deviceId}`;
+    header.appendChild(title);
+
+    if (peer.outcome.type === 'failed') {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-error';
+      badge.textContent = 'HTTP failed';
+      header.appendChild(badge);
+      block.appendChild(header);
+      const err = document.createElement('p');
+      err.textContent = peer.outcome.error;
+      block.appendChild(err);
+      if (peer.outcome.httpStatus != null) {
+        const status = document.createElement('p');
+        status.className = 'meta-line';
+        status.textContent = `HTTP ${peer.outcome.httpStatus}`;
+        block.appendChild(status);
+      }
+    } else {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-ok';
+      badge.textContent = peer.outcome.localOnly
+        ? 'Success (local only)'
+        : 'Success';
+      header.appendChild(badge);
+      block.appendChild(header);
+
+      if (peer.outcome.results.length > 0) {
+        block.appendChild(renderMonitorResults(peer.outcome.results));
+      }
+
+      const nested = peer.outcome.peerResults ?? [];
+      if (nested.length > 0) {
+        const nestedTitle = document.createElement('p');
+        nestedTitle.className = 'meta-line';
+        nestedTitle.textContent = 'Nested peer fan-out';
+        block.appendChild(nestedTitle);
+        block.appendChild(renderPeerResults(nested, depth + 1));
+      }
+    }
+
+    wrap.appendChild(block);
+  }
+
+  return wrap;
+}
+
+/**
+ * @param {string} value
+ */
+function escapeHtml(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}

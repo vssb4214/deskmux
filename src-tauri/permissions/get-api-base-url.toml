@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "get-api-base-url"
+description = "Allows the dashboard to read the local HTTP API base URL."
+commands.allow = ["get_api_base_url"]
