@@ -3,19 +3,32 @@ mod bootstrap;
 mod commands;
 mod config;
 pub mod executor;
+mod hotkeys;
 pub mod orchestrator;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod tray;
 
 pub use api::{PeerClient, PeerClientError};
 pub use bootstrap::BootstrapState;
 pub use config::Config;
 
+use std::sync::Arc;
+
 use commands::api_base_url_from_config;
 use tauri::Manager;
 
+use api::AppState;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![commands::get_api_base_url])
         .setup(|app| {
             let config_result = config::load_config(std::path::Path::new("deskmux.config.json"));
@@ -25,11 +38,19 @@ pub fn run() {
                     eprintln!("deskmux: failed to load deskmux.config.json\n{err}");
                 }
             }
-            let api_base_url = api_base_url_from_config(config_result.as_ref().ok());
+            let app_state = Arc::new(AppState::from_load_result(config_result));
+            let api_base_url = api_base_url_from_config(app_state.config.as_ref());
             app.manage(BootstrapState { api_base_url });
-            // Start the API even when config failed: /health stays up with configLoaded=false;
-            // /status and /apply-preset return 503 until a valid config is loaded.
-            api::spawn_server(config_result);
+
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                tray::init(app.handle(), app_state.clone())?;
+                if let Err(err) = hotkeys::register(app.handle(), app_state.clone()) {
+                    eprintln!("deskmux: global hotkey setup failed: {err}");
+                }
+            }
+
+            api::spawn_server(app_state);
             Ok(())
         })
         .run(tauri::generate_context!())

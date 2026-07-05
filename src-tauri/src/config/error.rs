@@ -42,6 +42,18 @@ pub enum ConfigError {
     PeerNameIsLocalDevice {
         peer_name: String,
     },
+    UnknownHotkeyPreset {
+        preset_name: String,
+    },
+    InvalidHotkeyShortcut {
+        preset_name: String,
+        shortcut: String,
+    },
+    DuplicateHotkey {
+        shortcut: String,
+        preset_a: String,
+        preset_b: String,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -105,6 +117,25 @@ impl fmt::Display for ConfigError {
             ConfigError::PeerNameIsLocalDevice { peer_name } => write!(
                 f,
                 "peer '{peer_name}' must not name this machine (deviceName)"
+            ),
+            ConfigError::UnknownHotkeyPreset { preset_name } => write!(
+                f,
+                "hotkeys references unknown preset '{preset_name}'"
+            ),
+            ConfigError::InvalidHotkeyShortcut {
+                preset_name,
+                shortcut,
+            } => write!(
+                f,
+                "hotkeys['{preset_name}'] has invalid shortcut '{shortcut}'"
+            ),
+            ConfigError::DuplicateHotkey {
+                shortcut,
+                preset_a,
+                preset_b,
+            } => write!(
+                f,
+                "hotkeys assigns the same shortcut '{shortcut}' to presets '{preset_a}' and '{preset_b}'"
             ),
         }
     }

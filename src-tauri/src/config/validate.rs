@@ -104,6 +104,8 @@ pub fn validate(config: &Config) -> Result<(), ConfigErrors> {
         }
     }
 
+    crate::hotkeys::validate_hotkeys(config, &mut errors);
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -165,6 +167,7 @@ mod tests {
                 inputs,
             }],
             presets,
+            hotkeys: HashMap::new(),
         }
     }
 

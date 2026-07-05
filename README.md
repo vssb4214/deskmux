@@ -16,6 +16,7 @@ If you run two machines into the same set of monitors, switching "who's driving 
 - **Config-driven** — monitors, inputs, and switch commands live in `deskmux.config.json`. Nothing about your hardware is baked into the code.
 - **Dry-run mode** — enabled by default in the dashboard; preview resolved commands before anything runs. Uncheck to execute.
 - **Local API + LAN coordination** — `/health`, `/status`, and coordinated preset apply over HTTP (`controlledBy`, peer fan-out). No auth yet; LAN bind is opt-in.
+- **System tray + global hotkeys** — apply presets from the tray menu or optional `hotkeys` in config (desktop only).
 - **Execution logs** — every command's stdout/stderr surfaces in the UI so failures are obvious.
 
 ## Requirements
@@ -51,6 +52,7 @@ Each monitor declares its inputs and the shell command that selects each input. 
 2. **Dry run** is checked by default — apply a preset to preview resolved commands without executing them.
 3. Uncheck **Dry run — preview commands only** when you are ready to switch monitor inputs, then apply a preset.
 4. Results (local, peer, and planning errors) appear in the dashboard; `lastAppliedPreset` updates only after a non-dry-run full success.
+5. **Tray / hotkeys (desktop):** use the system tray menu to show the window or apply a preset. Optional `hotkeys` in config register global shortcuts (real apply, same as unchecking dry-run in the dashboard).
 
 Config is still edited by hand in `deskmux.config.json` — in-app config editing is not implemented yet.
 
@@ -72,13 +74,13 @@ Phased so every step is a usable tool on its own, toward an all-in-one desktop c
 - [x] Preset executor + dry-run
 - [x] Local HTTP API + LAN peer coordination
 - [x] Dashboard apply/status UI (dry-run on by default)
+- [x] System tray + global hotkeys (desktop)
 - [ ] Dashboard config editing (machines, monitors, presets in UI)
 - [ ] Live logs / richer execution history
 
 **Next — native monitor control (not implemented yet)**
 - [ ] Built-in DDC/CI: input source, brightness, contrast, and other VCP controls where the monitor exposes them — no required external tool on supported displays
 - [ ] Shell-command backend kept as optional fallback for quirky displays
-- [ ] System tray + global hotkeys
 - [ ] Peer auto-discovery on the LAN
 
 **Later — keyboard/mouse sharing and smart handoff (not implemented yet)**
