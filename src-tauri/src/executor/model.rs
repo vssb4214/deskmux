@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutorError {
     PresetNotFound { preset_name: String },
@@ -18,7 +20,8 @@ impl fmt::Display for ExecutorError {
 impl std::error::Error for ExecutorError {}
 
 /// Why a single layout entry (monitorId -> deviceId) couldn't be resolved to a command.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum ResolutionError {
     UnknownMonitor {
         monitor_id: String,
@@ -48,7 +51,8 @@ impl fmt::Display for ResolutionError {
 
 impl std::error::Error for ResolutionError {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MonitorResult {
     pub monitor_id: String,
     pub device_id: String,
@@ -59,7 +63,8 @@ pub struct MonitorResult {
     pub outcome: MonitorOutcome,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum MonitorOutcome {
     /// Resolved successfully but not executed, because dry-run was requested.
     DryRun,
@@ -77,5 +82,7 @@ pub enum MonitorOutcome {
     SpawnFailed {
         message: String,
     },
-    ResolutionFailed(ResolutionError),
+    ResolutionFailed {
+        error: ResolutionError,
+    },
 }
