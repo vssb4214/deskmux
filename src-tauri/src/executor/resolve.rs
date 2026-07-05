@@ -2,7 +2,34 @@ use std::collections::HashMap;
 
 use super::backend::BackendAction;
 use super::model::{ExecutorError, ResolutionError};
-use crate::config::Config;
+use crate::config::{Config, Input, Monitor};
+
+/// VCP feature code for input-source select — the only capability the config schema exposes
+/// through `nativeDdc` today (see `InputNativeDdc` in config/model.rs).
+const VCP_INPUT_SOURCE: u8 = 0x60;
+
+/// Decides which backend action an input resolves to. Native DDC is only chosen when
+/// `native_available` (the platform can actually run it) and both the monitor's `nativeDdc`
+/// and this input's `nativeDdc` are set; otherwise falls back to the shell `command` if one is
+/// configured. `native_available` is a parameter rather than a hard-coded platform check
+/// specifically so this decision is testable on any OS (see executor::mod's default).
+fn select_action(
+    monitor: &Monitor,
+    input: &Input,
+    native_available: bool,
+) -> Option<BackendAction> {
+    if native_available {
+        if let (Some(monitor_native), Some(input_native)) = (&monitor.native_ddc, &input.native_ddc)
+        {
+            return Some(BackendAction::NativeDdc {
+                display_id: monitor_native.display_id.clone(),
+                vcp_code: VCP_INPUT_SOURCE,
+                value: u16::from(input_native.input_source_value),
+            });
+        }
+    }
+    input.command.clone().map(BackendAction::Shell)
+}
 
 #[derive(Debug, PartialEq)]
 pub(super) struct ResolvedCommand {
@@ -29,6 +56,7 @@ pub type LayoutEntry = (String, String);
 pub(super) fn resolve_layout_entries(
     config: &Config,
     entries: &[LayoutEntry],
+    native_available: bool,
 ) -> Vec<ResolvedEntry> {
     let monitors_by_id: HashMap<&str, _> =
         config.monitors.iter().map(|m| (m.id.as_str(), m)).collect();
@@ -64,14 +92,12 @@ pub(super) fn resolve_layout_entries(
                             device_id: device_id.clone(),
                         },
                     },
-                    Some(input) => match &input.command {
-                        Some(command) => ResolvedEntry::Ready(ResolvedCommand {
+                    Some(input) => match select_action(monitor, input, native_available) {
+                        Some(action) => ResolvedEntry::Ready(ResolvedCommand {
                             monitor_id: monitor_id.clone(),
                             device_id: device_id.clone(),
-                            action: BackendAction::Shell(command.clone()),
+                            action,
                         }),
-                        // Native-only inputs aren't executable yet — the NativeDdc action and
-                        // platform-aware fallback land in a follow-up commit on this branch.
                         None => ResolvedEntry::Failed {
                             monitor_id: monitor_id.clone(),
                             device_id: device_id.clone(),
@@ -135,6 +161,23 @@ mod tests {
                     "inputs": {
                         "device-a": { "type": "hdmi", "command": "cmd-monitor1-a" }
                     }
+                },
+                {
+                    "id": "monitor3",
+                    "label": "Monitor 3",
+                    "order": 2,
+                    "nativeDdc": { "displayId": "DEL4176:0" },
+                    "inputs": {
+                        "device-a": {
+                            "type": "displayport",
+                            "command": "cmd-monitor3-a",
+                            "nativeDdc": { "inputSourceValue": 15 }
+                        },
+                        "device-b": {
+                            "type": "hdmi",
+                            "nativeDdc": { "inputSourceValue": 17 }
+                        }
+                    }
                 }
             ],
             "presets": {
@@ -149,6 +192,14 @@ mod tests {
                 "unknown_device_preset": {
                     "label": "Unknown device",
                     "layout": { "monitor1": "device-b" }
+                },
+                "native_preset": {
+                    "label": "Native",
+                    "layout": { "monitor3": "device-a" }
+                },
+                "native_only_preset": {
+                    "label": "Native only",
+                    "layout": { "monitor3": "device-b" }
                 }
             }
         }"#;
@@ -160,7 +211,7 @@ mod tests {
         let config = fixture_config();
 
         let entries = preset_layout_entries(&config, "valid_preset").expect("should resolve");
-        let resolved = resolve_layout_entries(&config, &entries);
+        let resolved = resolve_layout_entries(&config, &entries, false);
 
         assert_eq!(
             resolved,
@@ -184,7 +235,7 @@ mod tests {
         let config = fixture_config();
         let entries = vec![("monitor1".to_string(), "device-a".to_string())];
 
-        let resolved = resolve_layout_entries(&config, &entries);
+        let resolved = resolve_layout_entries(&config, &entries, false);
 
         assert_eq!(
             resolved,
@@ -201,7 +252,7 @@ mod tests {
         let config = fixture_config();
         let entries = vec![("monitor1".to_string(), "device-a".to_string())];
 
-        let resolved = resolve_layout_entries(&config, &entries);
+        let resolved = resolve_layout_entries(&config, &entries, false);
 
         assert!(!resolved.iter().any(|entry| match entry {
             ResolvedEntry::Failed { monitor_id, .. }
@@ -217,7 +268,7 @@ mod tests {
 
         let entries =
             preset_layout_entries(&config, "unknown_monitor_preset").expect("should resolve");
-        let resolved = resolve_layout_entries(&config, &entries);
+        let resolved = resolve_layout_entries(&config, &entries, false);
 
         assert_eq!(
             resolved,
@@ -237,7 +288,7 @@ mod tests {
 
         let entries =
             preset_layout_entries(&config, "unknown_device_preset").expect("should resolve");
-        let resolved = resolve_layout_entries(&config, &entries);
+        let resolved = resolve_layout_entries(&config, &entries, false);
 
         assert_eq!(
             resolved,
@@ -266,24 +317,81 @@ mod tests {
         );
     }
 
-    /// Locks in today's (only) backend selection rule: every resolved entry is
-    /// `BackendAction::Shell`, because `Input` has no native-DDC alternative yet. Once Phase 2
-    /// adds one, this test should fail loudly and force a deliberate update to the selection
-    /// logic rather than silently changing the default.
+    /// Shell-only inputs (no `nativeDdc`) must behave identically to before native DDC existed,
+    /// regardless of `native_available` — there's nothing for selection to choose between.
     #[test]
-    fn always_selects_shell_backend_for_now() {
+    fn shell_only_input_resolves_to_shell_regardless_of_native_available() {
         let config = fixture_config();
-
         let entries = preset_layout_entries(&config, "valid_preset").expect("should resolve");
-        let resolved = resolve_layout_entries(&config, &entries);
 
-        assert!(!resolved.is_empty());
-        assert!(resolved.iter().all(|entry| matches!(
-            entry,
-            ResolvedEntry::Ready(ResolvedCommand {
-                action: BackendAction::Shell(_),
-                ..
-            })
-        )));
+        for native_available in [false, true] {
+            let resolved = resolve_layout_entries(&config, &entries, native_available);
+            assert!(!resolved.is_empty());
+            assert!(resolved.iter().all(|entry| matches!(
+                entry,
+                ResolvedEntry::Ready(ResolvedCommand {
+                    action: BackendAction::Shell(_),
+                    ..
+                })
+            )));
+        }
+    }
+
+    #[test]
+    fn native_ddc_input_selects_native_when_available() {
+        let config = fixture_config();
+        let entries = preset_layout_entries(&config, "native_preset").expect("should resolve");
+
+        let resolved = resolve_layout_entries(&config, &entries, true);
+
+        assert_eq!(
+            resolved,
+            vec![ResolvedEntry::Ready(ResolvedCommand {
+                monitor_id: "monitor3".to_string(),
+                device_id: "device-a".to_string(),
+                action: BackendAction::NativeDdc {
+                    display_id: "DEL4176:0".to_string(),
+                    vcp_code: 0x60,
+                    value: 15,
+                },
+            })]
+        );
+    }
+
+    #[test]
+    fn native_ddc_input_falls_back_to_shell_when_native_unavailable() {
+        let config = fixture_config();
+        let entries = preset_layout_entries(&config, "native_preset").expect("should resolve");
+
+        let resolved = resolve_layout_entries(&config, &entries, false);
+
+        assert_eq!(
+            resolved,
+            vec![ResolvedEntry::Ready(ResolvedCommand {
+                monitor_id: "monitor3".to_string(),
+                device_id: "device-a".to_string(),
+                action: BackendAction::Shell("cmd-monitor3-a".to_string()),
+            })]
+        );
+    }
+
+    #[test]
+    fn native_only_input_errors_when_native_unavailable() {
+        let config = fixture_config();
+        let entries = preset_layout_entries(&config, "native_only_preset").expect("should resolve");
+
+        let resolved = resolve_layout_entries(&config, &entries, false);
+
+        assert_eq!(
+            resolved,
+            vec![ResolvedEntry::Failed {
+                monitor_id: "monitor3".to_string(),
+                device_id: "device-b".to_string(),
+                error: ResolutionError::NoBackendAvailable {
+                    monitor_id: "monitor3".to_string(),
+                    device_id: "device-b".to_string(),
+                },
+            }]
+        );
     }
 }
