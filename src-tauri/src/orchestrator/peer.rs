@@ -6,7 +6,9 @@ use crate::executor::MonitorResult;
 /// Response from a peer's local-only preset apply (transport layer).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerApplyResponse {
+    pub local_only: bool,
     pub local_results: Vec<MonitorResult>,
+    pub peer_results: Vec<super::model::PeerApplyOutcome>,
 }
 
 #[async_trait]
@@ -34,7 +36,9 @@ impl PeerApplyClient for PeerClientAdapter {
         let client = crate::api::PeerClient::new(host, port);
         let response = client.apply_preset(preset, dry_run, true).await?;
         Ok(PeerApplyResponse {
+            local_only: response.local_only,
             local_results: response.local_results,
+            peer_results: response.peer_results,
         })
     }
 }

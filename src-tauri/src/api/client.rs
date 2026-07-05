@@ -57,6 +57,17 @@ impl PeerClient {
         decode_json(response).await
     }
 
+    pub async fn status(&self) -> Result<super::types::StatusResponse, PeerClientError> {
+        let url = format!("{}/status", self.base_url);
+        let response = self
+            .http
+            .get(url)
+            .send()
+            .await
+            .map_err(PeerClientError::Request)?;
+        decode_json(response).await
+    }
+
     pub async fn apply_preset(
         &self,
         preset: &str,
@@ -101,10 +112,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::{router, AppState};
-    use std::net::SocketAddr;
-    use tokio::net::TcpListener;
-    use tokio::task::JoinHandle;
+    use crate::api::{test_server::spawn_test_server, AppState};
+    use reqwest::StatusCode as HttpStatus;
 
     fn test_config() -> crate::config::Config {
         let json = r#"{
@@ -128,19 +137,6 @@ mod tests {
             }
         }"#;
         serde_json::from_str(json).expect("fixture config should parse")
-    }
-
-    async fn spawn_test_server(state: AppState) -> (SocketAddr, JoinHandle<()>) {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind ephemeral port");
-        let addr = listener.local_addr().expect("local addr");
-        let handle = tokio::spawn(async move {
-            axum::serve(listener, router(state))
-                .await
-                .expect("serve test API");
-        });
-        (addr, handle)
     }
 
     #[tokio::test]
