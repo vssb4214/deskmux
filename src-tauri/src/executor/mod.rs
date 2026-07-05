@@ -50,7 +50,7 @@ fn run_entry(entry: ResolvedEntry, dry_run: bool, runner: &dyn CommandRunner) ->
                 device_id,
                 command: None,
                 executed: false,
-                outcome: MonitorOutcome::ResolutionFailed(error),
+                outcome: MonitorOutcome::ResolutionFailed { error },
             };
         }
         ResolvedEntry::Ready(cmd) => cmd,
@@ -266,9 +266,11 @@ mod tests {
                 device_id: "device-a".to_string(),
                 command: None,
                 executed: false,
-                outcome: MonitorOutcome::ResolutionFailed(ResolutionError::UnknownMonitor {
-                    monitor_id: "ghost-monitor".to_string(),
-                }),
+                outcome: MonitorOutcome::ResolutionFailed {
+                    error: ResolutionError::UnknownMonitor {
+                        monitor_id: "ghost-monitor".to_string(),
+                    },
+                },
             }]
         );
     }
@@ -311,9 +313,11 @@ mod tests {
                     device_id: "device-a".to_string(),
                     command: None,
                     executed: false,
-                    outcome: MonitorOutcome::ResolutionFailed(ResolutionError::UnknownMonitor {
-                        monitor_id: "ghost-monitor".to_string(),
-                    }),
+                    outcome: MonitorOutcome::ResolutionFailed {
+                        error: ResolutionError::UnknownMonitor {
+                            monitor_id: "ghost-monitor".to_string(),
+                        },
+                    },
                 },
             ]
         );
