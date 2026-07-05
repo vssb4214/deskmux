@@ -26,7 +26,8 @@ cp deskmux.config.example.json deskmux.config.json
 | `monitors[].id`            | string | Stable key referenced by presets.                                             |
 | `monitors[].label`         | string | Human-readable name shown in the UI.                                          |
 | `monitors[].order`         | number | Display order in the UI (lower = first).                                       |
-| `monitors[].inputs`        | object | Map of **device id** → `{ type, command }`. Only list the machines this monitor can actually receive. |
+| `monitors[].controlledBy`  | string | Optional. Device id that runs input-switch commands for this monitor. Defaults to this config's `deviceName` at apply/validation time (not a serde default — see below). |
+| `monitors[].inputs`        | object | Map of **device id** → `{ type, command }`. Required for locally owned monitors; omit for remote-owned stubs on a coordinator. |
 | `inputs.<deviceId>.type`   | string | Connector type, informational (`hdmi`, `displayport`, `usb-c`).               |
 | `inputs.<deviceId>.command`| string | Shell command that selects this input on this monitor.                         |
 | `presets`                  | object | Map of preset name → `{ label, layout }`.                                    |
@@ -34,13 +35,83 @@ cp deskmux.config.example.json deskmux.config.json
 
 **Key idea:** input keys are device ids, not fixed strings. Two machines or six, three monitors or one — you describe your setup and DeskMux adapts. A monitor only needs to declare the inputs it physically has; presets can only route a monitor to a machine it declares.
 
+## Monitor ownership (`controlledBy`)
+
+Each monitor has an **owner** — the machine that runs the shell command to switch its input. That owner is `monitors[].controlledBy`, which defaults to this config's `deviceName` when omitted.
+
+Because serde field defaults cannot read the parent config, the default is applied in validation/planning code via `Monitor::controlled_by(&config.device_name)`, not at JSON parse time.
+
+| `controlledBy`                         | Who runs the command | Config requirements on this machine |
+|----------------------------------------|----------------------|-------------------------------------|
+| Omitted or equals `deviceName`         | This machine         | `inputs` required; preset layout targets must have a matching input entry |
+| Another `devices[].id`                 | That peer            | Stub allowed: `id`, `label`, `order`, and `controlledBy` only — no `inputs` |
+
+**Coordinator rule:** the coordinating machine must list every monitor it wants to switch in its own `monitors[]`, including monitors physically attached elsewhere. For remote-owned monitors, add a **stub** entry so the coordinator knows which peer owns the command:
+
+```json
+{
+  "id": "monitor3",
+  "label": "Mac-side Monitor",
+  "order": 2,
+  "controlledBy": "mac-mini"
+}
+```
+
+The owning peer's config carries the real `inputs` and runs the command when the coordinator fans out a preset apply.
+
+**Validation:**
+
+- Locally owned monitors (`controlledBy == deviceName`): require `inputs`; each preset layout entry targeting a device must have a matching input command on that monitor.
+- Remote-owned stubs (`controlledBy != deviceName`): `inputs` may be omitted; preset validation only checks that the layout's target `deviceId` exists in `devices[]`. The owning peer validates and executes its local command.
+- `peers[].name` must match a `devices[].id` and must not equal `deviceName`.
+
+## Peer coordination
+
+When a coordinator calls `POST /apply-preset` without `localOnly`, DeskMux:
+
+1. Plans the preset layout against **this** config's monitor list.
+2. Runs commands for monitors where `controlledBy == deviceName`.
+3. Calls each required peer's API with `{ "preset": "...", "dryRun": ..., "localOnly": true }` so peers only act on monitors they own.
+
+**Missing monitors:**
+
+| Mode | Behavior |
+|------|----------|
+| Coordinator (`localOnly: false`) | A preset layout entry whose `monitorId` is missing from this config returns a structured `planningErrors` entry (`unknownMonitor`) — not a silent skip. |
+| Peer / local-only (`localOnly: true`) | Layout entries for monitors missing from this config or owned by another device are skipped. Peers may have partial configs. |
+
+Peer HTTP calls still run during dry-run (with `dryRun: true` on the peer) so you can preview coordinated applies end-to-end without executing commands.
+
 ## Local HTTP API
 
 DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`):
 
 - `GET /health` — liveness; works even when config failed to load
 - `GET /status` — device name, presets, monitors (no shell commands)
-- `POST /apply-preset` — apply a named preset (`{ "preset": "...", "dryRun": false }`)
+- `POST /apply-preset` — apply a named preset (see below)
+
+### `POST /apply-preset`
+
+**Request** (`application/json`):
+
+| Field        | Type    | Default | Description |
+|--------------|---------|---------|-------------|
+| `preset`     | string  | —       | Preset name (required) |
+| `dryRun`     | boolean | `false` | Resolve and report commands without executing |
+| `localOnly`  | boolean | `false` | When `true`, only apply monitors owned by this machine — no peer fan-out. Peers always receive `localOnly: true` when called by a coordinator. |
+
+**Response** (200 on success):
+
+| Field              | Description |
+|--------------------|-------------|
+| `preset`           | Preset name applied |
+| `dryRun`           | Whether this was a dry run |
+| `localOnly`        | Whether peer fan-out was skipped |
+| `planningErrors`   | Structured planning failures (e.g. unknown monitor on coordinator) |
+| `localResults`     | Per-monitor results for commands run on this machine |
+| `peerResults`      | Per-peer outcomes when coordinating (HTTP errors, nested `localResults` on success) |
+
+`lastAppliedPreset` in `GET /status` updates only on a **non-dry-run full success**: no planning errors, all local monitor outcomes successful, and all peer calls successful. Dry-run and any failure leave it unchanged. A coordinated apply with no local entries still updates when all peer work succeeds.
 
 | Setting        | Default   | Bind address                          |
 |----------------|-----------|---------------------------------------|
