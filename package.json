@@ -6,7 +6,7 @@
   "scripts": {
     "tauri": "tauri",
     "lint": "node scripts/check-js.mjs",
-    "test": "node --test test/summary.test.js"
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
