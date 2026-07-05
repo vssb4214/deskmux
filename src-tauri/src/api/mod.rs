@@ -2,6 +2,7 @@ pub mod apply;
 pub mod bind;
 pub mod client;
 mod cors;
+pub mod events;
 mod handlers;
 #[cfg(test)]
 mod peer_orchestration;
@@ -13,6 +14,7 @@ pub mod types;
 pub use apply::{apply_preset_to_arc, apply_preset_to_state, ApplyPresetStateError};
 pub use bind::{dashboard_api_base_url, resolve_bind_addr, DEFAULT_BIND_HOST, DEFAULT_PORT};
 pub use client::{PeerClient, PeerClientError};
+pub use events::{ApplySource, DeskMuxEvent, EventLog};
 pub use handlers::AppState;
 pub use server::spawn_server;
 
@@ -27,6 +29,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(handlers::health))
         .route("/status", get(handlers::status))
+        .route("/events", get(handlers::events))
         .route("/apply-preset", post(handlers::apply_preset_handler))
         .layer(cors::dashboard_cors_layer())
         .with_state(state)
@@ -224,6 +227,19 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["configLoaded"], true);
         assert!(json.get("configError").is_none());
+    }
+
+    #[tokio::test]
+    async fn events_returns_recent_history() {
+        let app = app_with_config();
+        let (status, json) = get(&app, "/events").await;
+        assert_eq!(status, StatusCode::OK);
+        let events = json["events"].as_array().expect("events array");
+        assert!(!events.is_empty());
+        assert!(events[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Config loaded"));
     }
 
     #[tokio::test]

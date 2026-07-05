@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use crate::executor::ExecutorError;
+use crate::executor::{MonitorOutcome, MonitorResult};
 use crate::orchestrator::{apply_preset, CoordinatedApplyResult, PeerClientAdapter};
 
+use super::events::{
+    record_apply_finished, record_apply_started, record_native_ddc_result, ApplySource,
+};
 use super::handlers::AppState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,15 +22,19 @@ pub async fn apply_preset_to_state(
     preset: &str,
     dry_run: bool,
     local_only: bool,
+    source: ApplySource,
 ) -> Result<CoordinatedApplyResult, ApplyPresetStateError> {
     let config = state
         .config
         .as_ref()
         .ok_or(ApplyPresetStateError::ConfigNotLoaded)?;
 
+    record_apply_started(&state.events, preset, dry_run, source);
+
     let peer_client = PeerClientAdapter;
     match apply_preset(config, preset, dry_run, local_only, &peer_client).await {
         Ok(result) => {
+            record_apply_outcome(state, preset, dry_run, source, &result);
             if !dry_run && result.is_full_success() {
                 *state
                     .last_applied_preset
@@ -36,7 +43,8 @@ pub async fn apply_preset_to_state(
             }
             Ok(result)
         }
-        Err(ExecutorError::PresetNotFound { preset_name }) => {
+        Err(crate::executor::ExecutorError::PresetNotFound { preset_name }) => {
+            record_apply_finished(&state.events, preset, dry_run, source, false, &[]);
             Err(ApplyPresetStateError::PresetNotFound { preset_name })
         }
     }
@@ -48,8 +56,74 @@ pub async fn apply_preset_to_arc(
     preset: &str,
     dry_run: bool,
     local_only: bool,
+    source: ApplySource,
 ) -> Result<CoordinatedApplyResult, ApplyPresetStateError> {
-    apply_preset_to_state(&state, preset, dry_run, local_only).await
+    apply_preset_to_state(&state, preset, dry_run, local_only, source).await
+}
+
+fn record_apply_outcome(
+    state: &AppState,
+    preset: &str,
+    dry_run: bool,
+    source: ApplySource,
+    result: &CoordinatedApplyResult,
+) {
+    let failed_monitors = failed_monitor_ids(result);
+    record_apply_finished(
+        &state.events,
+        preset,
+        dry_run,
+        source,
+        result.is_full_success(),
+        &failed_monitors,
+    );
+    for monitor_result in &result.local_results {
+        if is_native_ddc_result(monitor_result) {
+            let success = monitor_outcome_ok(&monitor_result.outcome);
+            record_native_ddc_result(
+                &state.events,
+                &monitor_result.monitor_id,
+                success,
+                Some(preset),
+                Some(source),
+            );
+        }
+    }
+}
+
+fn is_native_ddc_result(result: &MonitorResult) -> bool {
+    result
+        .command
+        .as_deref()
+        .is_some_and(|cmd| cmd.starts_with("native DDC:"))
+}
+
+fn monitor_outcome_ok(outcome: &MonitorOutcome) -> bool {
+    matches!(
+        outcome,
+        MonitorOutcome::Success { .. } | MonitorOutcome::DryRun
+    )
+}
+
+fn failed_monitor_ids(result: &CoordinatedApplyResult) -> Vec<String> {
+    let mut failed = Vec::new();
+    for r in &result.local_results {
+        if !monitor_outcome_ok(&r.outcome) {
+            failed.push(r.monitor_id.clone());
+        }
+    }
+    for peer in &result.peer_results {
+        if let crate::orchestrator::PeerOutcome::Failed { .. } = peer.outcome {
+            failed.push(format!("peer:{}", peer.device_id));
+        } else if let crate::orchestrator::PeerOutcome::Success { results, .. } = &peer.outcome {
+            for r in results {
+                if !monitor_outcome_ok(&r.outcome) {
+                    failed.push(format!("peer:{}:{}", peer.device_id, r.monitor_id));
+                }
+            }
+        }
+    }
+    failed
 }
 
 #[cfg(test)]
@@ -57,6 +131,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
+    use crate::api::events::{EventKind, MAX_EVENTS};
     use crate::config::Config;
 
     fn test_config() -> Config {
@@ -86,7 +161,7 @@ mod tests {
     #[tokio::test]
     async fn dry_run_does_not_update_last_applied_preset() {
         let state = Arc::new(AppState::from_load_result(Ok(test_config())));
-        apply_preset_to_state(&state, "all_a", true, true)
+        apply_preset_to_state(&state, "all_a", true, true, ApplySource::Api)
             .await
             .expect("dry run should succeed");
         assert!(state.last_applied_preset.lock().unwrap().is_none());
@@ -95,7 +170,7 @@ mod tests {
     #[tokio::test]
     async fn successful_apply_updates_last_applied_preset() {
         let state = Arc::new(AppState::from_load_result(Ok(test_config())));
-        apply_preset_to_state(&state, "all_a", false, true)
+        apply_preset_to_state(&state, "all_a", false, true, ApplySource::Api)
             .await
             .expect("apply should succeed");
         assert_eq!(
@@ -111,9 +186,21 @@ mod tests {
             "missing",
         )
         .into())));
-        let err = apply_preset_to_state(&state, "all_a", false, false)
+        let err = apply_preset_to_state(&state, "all_a", false, false, ApplySource::Api)
             .await
             .expect_err("should fail without config");
         assert_eq!(err, ApplyPresetStateError::ConfigNotLoaded);
+    }
+
+    #[tokio::test]
+    async fn apply_records_start_and_finish_events() {
+        let state = Arc::new(AppState::from_load_result(Ok(test_config())));
+        apply_preset_to_state(&state, "all_a", true, true, ApplySource::Api)
+            .await
+            .expect("dry run should succeed");
+
+        let events = state.events.lock().unwrap().recent(MAX_EVENTS);
+        assert!(events.iter().any(|e| e.message.contains("started")));
+        assert!(events.iter().any(|e| e.kind == EventKind::Success));
     }
 }

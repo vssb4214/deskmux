@@ -70,6 +70,7 @@ pub fn register(
 
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
+    use crate::api::events::ApplySource;
     use crate::api::{apply_preset_to_arc, ApplyPresetStateError};
 
     let Some(config) = state.config.as_ref() else {
@@ -103,7 +104,9 @@ pub fn register(
                     let state = state.clone();
                     let preset = preset.clone();
                     tauri::async_runtime::spawn(async move {
-                        match apply_preset_to_arc(state, &preset, false, false).await {
+                        match apply_preset_to_arc(state, &preset, false, false, ApplySource::Hotkey)
+                            .await
+                        {
                             Ok(result) if result.is_full_success() => {}
                             Ok(_) => {
                                 eprintln!("deskmux: hotkey preset '{preset}' applied with errors");

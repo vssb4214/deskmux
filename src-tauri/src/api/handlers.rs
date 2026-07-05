@@ -9,30 +9,42 @@ use axum::{
 use crate::config::{Config, LoadError};
 
 use super::apply::{apply_preset_to_state, ApplyPresetStateError};
+use super::events::{record_config_error, record_config_loaded, EventLog};
 use super::types::{
-    ApplyPresetRequest, ApplyPresetResponse, ErrorResponse, HealthResponse, MonitorSummary,
-    PresetSummary, StatusResponse,
+    ApplyPresetRequest, ApplyPresetResponse, ErrorResponse, EventsResponse, HealthResponse,
+    MonitorSummary, PresetSummary, StatusResponse,
 };
 
 pub struct AppState {
     pub config: Option<Config>,
     pub config_error: Option<String>,
     pub last_applied_preset: Mutex<Option<String>>,
+    pub events: Mutex<EventLog>,
 }
 
 impl AppState {
     pub fn from_load_result(result: Result<Config, LoadError>) -> Self {
+        let events = Mutex::new(EventLog::new());
         match result {
-            Ok(config) => Self {
-                config: Some(config),
-                config_error: None,
-                last_applied_preset: Mutex::new(None),
-            },
-            Err(err) => Self {
-                config: None,
-                config_error: Some(err.to_string()),
-                last_applied_preset: Mutex::new(None),
-            },
+            Ok(config) => {
+                record_config_loaded(&events, &config.device_name);
+                Self {
+                    config: Some(config),
+                    config_error: None,
+                    last_applied_preset: Mutex::new(None),
+                    events,
+                }
+            }
+            Err(err) => {
+                let detail = err.to_string();
+                record_config_error(&events, &detail);
+                Self {
+                    config: None,
+                    config_error: Some(detail),
+                    last_applied_preset: Mutex::new(None),
+                    events,
+                }
+            }
         }
     }
 }
@@ -88,6 +100,13 @@ pub async fn status(
     }))
 }
 
+pub async fn events(State(state): State<Arc<AppState>>) -> Json<EventsResponse> {
+    let log = state.events.lock().expect("event log lock poisoned");
+    Json(EventsResponse {
+        events: log.recent(super::events::MAX_EVENTS),
+    })
+}
+
 pub async fn apply_preset_handler(
     State(state): State<Arc<AppState>>,
     body: Result<Json<ApplyPresetRequest>, JsonRejection>,
@@ -103,7 +122,15 @@ pub async fn apply_preset_handler(
         .as_ref()
         .ok_or_else(|| config_not_loaded(&state))?;
 
-    match apply_preset_to_state(&state, &body.preset, body.dry_run, body.local_only).await {
+    match apply_preset_to_state(
+        &state,
+        &body.preset,
+        body.dry_run,
+        body.local_only,
+        super::events::ApplySource::Api,
+    )
+    .await
+    {
         Ok(result) => Ok(Json(ApplyPresetResponse {
             preset: result.preset,
             dry_run: result.dry_run,
