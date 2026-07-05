@@ -49,6 +49,7 @@ mod tests {
             devices: vec![],
             monitors: vec![],
             presets: HashMap::new(),
+            hotkeys: HashMap::new(),
         }
     }
 

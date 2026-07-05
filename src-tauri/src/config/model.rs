@@ -17,6 +17,9 @@ pub struct Config {
     pub devices: Vec<Device>,
     pub monitors: Vec<Monitor>,
     pub presets: HashMap<String, Preset>,
+    /// Optional global hotkeys mapping preset name → shortcut string (desktop only).
+    #[serde(default)]
+    pub hotkeys: HashMap<String, String>,
 }
 
 fn default_api_port() -> u16 {

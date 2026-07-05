@@ -55,5 +55,9 @@
       "label": "Mac-side monitor only",
       "layout": { "monitor3": "mac-mini" }
     }
+  },
+  "hotkeys": {
+    "all_windows": "Ctrl+Alt+1",
+    "split_win_mac": "Ctrl+Alt+2"
   }
 }
