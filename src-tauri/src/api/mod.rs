@@ -8,7 +8,7 @@ mod server;
 mod test_server;
 pub mod types;
 
-pub use bind::{resolve_bind_addr, DEFAULT_BIND_HOST, DEFAULT_PORT};
+pub use bind::{dashboard_api_base_url, resolve_bind_addr, DEFAULT_BIND_HOST, DEFAULT_PORT};
 pub use client::{PeerClient, PeerClientError};
 pub use handlers::AppState;
 pub use server::spawn_server;
