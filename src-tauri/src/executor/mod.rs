@@ -1,5 +1,6 @@
 mod backend;
 mod model;
+#[cfg(target_os = "windows")]
 mod native;
 mod resolve;
 mod runner;
@@ -9,9 +10,8 @@ mod windows_ddc;
 use std::io;
 
 use backend::{Backend, BackendAction, ShellBackend};
-use native::NativeDdcBackend;
 #[cfg(target_os = "windows")]
-use native::NativeDdcController;
+use native::{NativeDdcBackend, NativeDdcController};
 use resolve::{preset_layout_entries, resolve_layout_entries, ResolvedEntry};
 use runner::{CommandOutput, CommandRunner, ShellCommandRunner};
 #[cfg(target_os = "windows")]
