@@ -27,7 +27,15 @@ If you run two machines into the same set of monitors, switching "who's driving 
 
 ## Install
 
-_Coming with the first tagged release._ Until then, build from source:
+### Download (Windows)
+
+Grab the installer from [Releases](https://github.com/vssb4214/deskmux/releases) — `DeskMux_<version>_x64-setup.exe`. Run it and click through; it installs per-user, no admin rights needed.
+
+**About the SmartScreen warning:** the installer isn't code-signed (no certificate for this project yet), so Windows will show "Windows protected your PC" the first time you run it. Click **More info → Run anyway**. That's expected for any unsigned installer, not a sign something's wrong with this one specifically.
+
+macOS/Linux: build from source for now (below).
+
+### Build from source
 
 ```bash
 git clone https://github.com/vssb4214/deskmux.git
