@@ -126,7 +126,7 @@ function errorMessage(err) {
 
  */
 
-function showConfigError(configError) {
+async function showConfigError(configError) {
 
   renderConfigErrorBanner(els.statusBanner, configError);
 
@@ -137,6 +137,8 @@ function showConfigError(configError) {
   renderPresetOptions(els.presetSelect, []);
 
   setControlsDisabled(true);
+
+  await loadEvents();
 
 }
 
@@ -192,7 +194,7 @@ async function loadStatus() {
 
     if (!health.configLoaded) {
 
-      showConfigError(health.configError);
+      await showConfigError(health.configError);
 
       return;
 
@@ -224,7 +226,7 @@ async function loadStatus() {
 
     if (status === 503 && configError) {
 
-      showConfigError(configError);
+      await showConfigError(configError);
 
     } else {
 
@@ -296,7 +298,7 @@ async function applySelectedPreset() {
 
     if (status === 503 && configError) {
 
-      showConfigError(configError);
+      await showConfigError(configError);
 
     } else {
 
