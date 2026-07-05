@@ -10,10 +10,12 @@ cp deskmux.config.example.json deskmux.config.json
 
 ## Schema
 
-| Field                      | Type   | Description                                                                    |
-|----------------------------|--------|--------------------------------------------------------------------------------|
-| `deviceName`               | string | This machine's id (must match one of the `devices[].id`).                      |
-| `peers[]`                  | array  | Every other machine on the LAN.                                                |
+| Field                      | Type    | Description                                                                    |
+|----------------------------|---------|--------------------------------------------------------------------------------|
+| `deviceName`               | string  | This machine's id (must match one of the `devices[].id`).                      |
+| `apiPort`                  | number  | Port this machine's local HTTP API listens on. Default `3737`.                 |
+| `apiLanAccess`             | boolean | When `true`, bind the API on all interfaces (`0.0.0.0`) so LAN peers can reach it. Default `false` (loopback only, `127.0.0.1`). **Security:** enabling LAN access lets other machines on your network trigger any preset defined in your config — only enable on trusted networks; authentication is not implemented yet. |
+| `peers[]`                  | array   | Every other machine on the LAN.                                                |
 | `peers[].name`             | string | Peer machine name.                                                            |
 | `peers[].host`             | string | Peer LAN IP.                                                                   |
 | `peers[].port`             | number | Port the peer's DeskMux API listens on (default `3737`).                       |
@@ -31,6 +33,24 @@ cp deskmux.config.example.json deskmux.config.json
 | `presets.<name>.layout`    | object | Map of `monitorId` → `deviceId`.                                              |
 
 **Key idea:** input keys are device ids, not fixed strings. Two machines or six, three monitors or one — you describe your setup and DeskMux adapts. A monitor only needs to declare the inputs it physically has; presets can only route a monitor to a machine it declares.
+
+## Local HTTP API
+
+DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`):
+
+- `GET /health` — liveness; works even when config failed to load
+- `GET /status` — device name, presets, monitors (no shell commands)
+- `POST /apply-preset` — apply a named preset (`{ "preset": "...", "dryRun": false }`)
+
+| Setting        | Default   | Bind address                          |
+|----------------|-----------|---------------------------------------|
+| `apiPort`      | `3737`    | Port on this machine                  |
+| `apiLanAccess` | `false`   | `127.0.0.1` (local processes only)    |
+| `apiLanAccess` | `true`    | `0.0.0.0` (reachable from the LAN)    |
+
+With `apiLanAccess: false`, only local clients can call the API. With `apiLanAccess: true`, any machine on your network that can reach the port may trigger configured presets by name. There is no auth yet — treat LAN access as an explicit opt-in on trusted networks only.
+
+Peer entries (`peers[].host` / `peers[].port`) tell DeskMux where to call on *other* machines; they do not change where this machine binds its own API.
 
 ## The important part: the `command` field
 
