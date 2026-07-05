@@ -41,8 +41,21 @@ pub struct Monitor {
     pub id: String,
     pub label: String,
     pub order: u32,
-    /// Keyed by device id. A monitor only declares the inputs it physically has.
+    /// Device id of the machine that runs DDC for this monitor. When omitted, defaults to
+    /// this config's `deviceName` (see `Monitor::controlled_by`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controlled_by: Option<String>,
+    /// Keyed by device id. Required on the owning machine; remote stubs may omit inputs.
+    #[serde(default)]
     pub inputs: HashMap<String, Input>,
+}
+
+impl Monitor {
+    /// Effective command owner for this monitor. Not a serde default — `deviceName` lives on
+    /// the parent [`Config`], so callers pass it explicitly after load.
+    pub fn controlled_by<'a>(&'a self, device_name: &'a str) -> &'a str {
+        self.controlled_by.as_deref().unwrap_or(device_name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
