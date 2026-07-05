@@ -3,6 +3,7 @@ mod bootstrap;
 mod commands;
 mod config;
 pub mod executor;
+mod hotkeys;
 pub mod orchestrator;
 
 pub use api::{PeerClient, PeerClientError};
