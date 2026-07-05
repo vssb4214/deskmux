@@ -1,4 +1,10 @@
 /**
+ * @typedef {{
+ *   status: string,
+ *   configLoaded: boolean,
+ *   configError?: string
+ * }} HealthResponse
+ * @typedef {{ error: string, configError?: string }} ApiErrorResponse
  * @typedef {{ name: string, label: string }} PresetSummary
  * @typedef {{ id: string, label: string, order: number }} MonitorSummary
  * @typedef {{
