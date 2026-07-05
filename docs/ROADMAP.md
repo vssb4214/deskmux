@@ -1,6 +1,8 @@
 # Roadmap
 
-DeskMux is built in phases so that every phase is a genuinely usable tool, not a half-finished everything. The ordering is deliberate: ship the part that works reliably today, make it standalone, and only then take on the much larger peripheral-sharing problem.
+DeskMux is built in phases so that every phase is a genuinely usable tool, not a half-finished everything. The ordering is deliberate: ship the part that works reliably today, make it standalone, and only then take on coordinated keyboard/mouse handoff.
+
+**Long-term vision:** DeskMux is intended to become an **all-in-one desktop control suite** — native monitor control, coordinated keyboard/mouse handoff, and smart input switching — not a permanent wrapper around ControlMyMonitor, ddcutil, BetterDisplay, or Lunar.
 
 ## Phase 1 — Monitor switching foundation
 
@@ -16,25 +18,37 @@ Core switching, API, coordination, and dashboard apply/status are done. Config e
 - [ ] Dashboard UI: add / remove / reorder machines and monitors; edit presets in UI
 - [ ] Live logs / richer execution history in the dashboard
 
-This phase depends on an external monitor-control tool (ControlMyMonitor / ddcutil / BetterDisplay / Lunar) via configured shell commands.
+Phase 1 uses external monitor-control tools (ControlMyMonitor, ddcutil, BetterDisplay, Lunar, and similar) as **temporary backend adapters** via configured shell commands, so DeskMux is useful immediately. **This is not the end goal.** The long-term goal is for DeskMux to provide native monitor control directly and become an all-in-one suite rather than a wrapper.
 
-## Phase 2 — Make it standalone
+## Phase 2 — Native monitor control (make it standalone)
 
-- [ ] **Native DDC/CI support.** Talk to monitors directly from Rust (e.g. the `ddc` / `ddc-hi` crates) so no external tool is required. This is the headline improvement — dependency-free monitor switching.
-  - Keep the shell-command path as a per-monitor escape hatch. Some displays misbehave over native DDC (the Apple Silicon HDMI port is DDC-blind; some LG panels don't expose input select), and a raw-command fallback keeps those working.
+Phase 2 replaces the *requirement* for external monitor tools on supported displays. Nothing here is implemented yet.
+
+- [ ] **Native DDC/CI monitor control built into DeskMux.** Talk to monitors directly from Rust (e.g. the `ddc` / `ddc-hi` crates) so supported monitors no longer need ControlMyMonitor, ddcutil, BetterDisplay, or Lunar installed.
+  - Keep the shell-command backend as an **optional fallback / escape hatch** for quirky displays (Apple Silicon HDMI ports that are DDC-blind, some LG panels, laptop panels, etc.).
+- [ ] **Monitor controls beyond input switching** — for monitors that expose the relevant VCP codes:
+  - input source (already the Phase 1 focus)
+  - brightness
+  - contrast
+  - volume / audio output (where supported)
+  - power / standby (where supported)
+  - other DDC/CI VCP controls the display actually exposes
+  - Not every control is available on every monitor; DeskMux will surface what the hardware supports.
 - [ ] System tray + global hotkeys (switch presets without opening the window)
 - [ ] Peer auto-discovery on the LAN (mDNS/similar), so peers don't have to be hand-configured with IPs
 
-## Phase 3 — Peripheral sharing (a separate, major undertaking)
+## Phase 3 — Keyboard, mouse, and smart handoff
 
-Sharing one keyboard and mouse across machines is not a feature bolted onto a monitor switcher — it's effectively a second product. Approached honestly:
+Keyboard and mouse sharing across machines is a **first-class future goal** for DeskMux — not an afterthought bolted onto preset switching. None of this is implemented yet.
 
-- [ ] **Software keyboard/mouse sharing.** Control another machine's cursor/keyboard over the network (the Synergy/Deskflow model: capture input events on the active machine, send over LAN, inject on the target).
-  - **Preferred first path: integrate [Deskflow](https://github.com/deskflow/deskflow)** rather than reimplement input capture/injection from scratch. DeskMux orchestrates the handoff (a preset switches monitors *and* tells the sharing layer which machine has focus). This is the realistic route to a working feature.
-  - A from-scratch implementation is a **stretch goal**, not a v1. The hard part is the per-OS input layer (low-level capture/injection differs substantially between Windows and macOS, and macOS gates injection behind accessibility permissions and blocks it entirely at the login screen). This is where Deskflow has spent years.
-- [ ] **Latency-optimized transport.** Where DeskMux can realistically beat incumbents is the network path:
-  - Prefer wired Ethernet over WiFi (lower, more consistent latency and jitter); support both.
-  - Lean LAN protocol — UDP with small packets, minimal serialization, no cloud relay.
+- [ ] **Built-in keyboard/mouse sharing and focus handoff.** Seamless cursor-driven handoff between machines over a low-latency LAN transport (prefer wired Ethernet; support WiFi where needed).
+  - Example: Windows on the left screen, Mac on the right — when the cursor leaves the Windows region and enters the Mac region, DeskMux shifts keyboard/mouse focus to the Mac and can coordinate the matching monitor-input preset so the physical desk follows the user automatically.
+  - The keyboard and mouse follow the active machine; monitor inputs and peripheral ownership move together.
+  - Eventually: built-in input capture and injection where feasible on each OS (not implemented yet; macOS login-screen injection is not possible).
+  - Software sharing is not zero-latency; true physical USB handoff still requires a hardware switch (see below).
+- [ ] **Smart focus/input handoff.** Presets and focus changes triggered by cursor crossing display regions, hotkeys, tray actions, or explicit focus changes — so monitor inputs and keyboard/mouse ownership stay in sync.
+- [ ] **Deskflow / Synergy-style integration as an optional bridge.** Integrating [Deskflow](https://github.com/deskflow/deskflow) (or similar) may be an early path or fallback while native DeskMux input sharing matures. The long-term vision is built-in DeskMux control, not permanent dependence on a third-party sharing daemon.
+- [ ] **Latency-optimized transport.** Lean LAN protocol — UDP with small packets, minimal serialization, no cloud relay — as the place DeskMux can realistically improve on incumbents.
 - [ ] **Hardware USB-switch integration.** For true, zero-latency handoff of the *physical* peripherals, drive a hardware USB switch and pair its toggle with a monitor preset. This is the only way to move the actual USB device between machines (see below).
 
 ## Explicitly not planned
