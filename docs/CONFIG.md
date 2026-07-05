@@ -32,8 +32,32 @@ cp deskmux.config.example.json deskmux.config.json
 | `inputs.<deviceId>.command`| string | Shell command that selects this input on this monitor.                         |
 | `presets`                  | object | Map of preset name → `{ label, layout }`.                                    |
 | `presets.<name>.layout`    | object | Map of `monitorId` → `deviceId`.                                              |
+| `hotkeys`                  | object | Optional. Map of **preset name** → global shortcut string (desktop only).      |
 
 **Key idea:** input keys are device ids, not fixed strings. Two machines or six, three monitors or one — you describe your setup and DeskMux adapts. A monitor only needs to declare the inputs it physically has; presets can only route a monitor to a machine it declares.
+
+## Global hotkeys (`hotkeys`)
+
+Optional map of preset name → shortcut string. When DeskMux runs on desktop (Windows/macOS/Linux), pressing a configured shortcut applies that preset for real (not dry-run), using the same orchestration path as the dashboard and API.
+
+```json
+"hotkeys": {
+  "all_windows": "Ctrl+Alt+1",
+  "split_win_mac": "Ctrl+Alt+2"
+}
+```
+
+**Rules:**
+
+- Each key must match a `presets` entry.
+- Shortcut strings use [Tauri global-shortcut syntax](https://v2.tauri.app/plugin/global-shortcut/) — e.g. `Ctrl+Alt+1`, `CmdOrCtrl+Shift+2` (cross-platform alias for Command on macOS / Control elsewhere).
+- Duplicate shortcuts across presets are rejected at validation.
+- Invalid shortcut strings are rejected at validation.
+- If another app already owns a shortcut at runtime, DeskMux logs a warning and skips that binding; the app still starts.
+- On macOS, global shortcuts may require accessibility permission.
+- When config fails to load, no hotkeys are registered.
+
+**System tray:** DeskMux also shows a tray icon with **Show DeskMux**, preset apply items (when config is loaded), and **Quit**. Tray preset apply uses the same real coordinated apply as hotkeys.
 
 ## Monitor ownership (`controlledBy`)
 
