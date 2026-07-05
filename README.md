@@ -29,7 +29,7 @@ If you run two machines into the same set of monitors, switching "who's driving 
 _Coming with the first tagged release._ Until then, build from source:
 
 ```bash
-git clone https://github.com/<you>/deskmux.git
+git clone https://github.com/vssb4214/deskmux.git
 cd deskmux
 npm install
 npm run tauri dev
