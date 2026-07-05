@@ -37,6 +37,7 @@ pub struct Device {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Monitor {
     pub id: String,
     pub label: String,
