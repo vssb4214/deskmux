@@ -1,6 +1,7 @@
 /** @typedef {import('../types.js').StatusResponse} StatusResponse */
 /** @typedef {import('../types.js').ApplyPresetResponse} ApplyPresetResponse */
-/** @typedef {import('../types.js').HealthResponse} HealthResponse */
+/** @typedef {import('../types.js').EventsResponse} EventsResponse */
+/** @typedef {import('../types.js').DeskMuxEvent} DeskMuxEvent */
 
 import { parseApiError } from '../lib/config-error.js';
 
@@ -33,6 +34,11 @@ export function createApiClient(baseUrl) {
     /** @returns {Promise<StatusResponse>} */
     async fetchStatus() {
       return requestJson('/status');
+    },
+
+    /** @returns {Promise<EventsResponse>} */
+    async fetchEvents() {
+      return requestJson('/events');
     },
 
     /**
