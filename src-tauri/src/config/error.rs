@@ -29,6 +29,19 @@ pub enum ConfigError {
         monitor_id: String,
         device_id: String,
     },
+    UnknownControlledBy {
+        monitor_id: String,
+        controlled_by: String,
+    },
+    LocallyOwnedMonitorMissingInputs {
+        monitor_id: String,
+    },
+    PeerNameNotFound {
+        peer_name: String,
+    },
+    PeerNameIsLocalDevice {
+        peer_name: String,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -73,6 +86,25 @@ impl fmt::Display for ConfigError {
             } => write!(
                 f,
                 "preset '{preset_name}' routes monitor '{monitor_id}' to '{device_id}', but {monitor_id} has no input for that device"
+            ),
+            ConfigError::UnknownControlledBy {
+                monitor_id,
+                controlled_by,
+            } => write!(
+                f,
+                "monitor '{monitor_id}' has unknown controlledBy '{controlled_by}' (must match a devices[].id)"
+            ),
+            ConfigError::LocallyOwnedMonitorMissingInputs { monitor_id } => write!(
+                f,
+                "monitor '{monitor_id}' is owned by this machine but declares no inputs"
+            ),
+            ConfigError::PeerNameNotFound { peer_name } => write!(
+                f,
+                "peer '{peer_name}' does not match any entry in devices[]"
+            ),
+            ConfigError::PeerNameIsLocalDevice { peer_name } => write!(
+                f,
+                "peer '{peer_name}' must not name this machine (deviceName)"
             ),
         }
     }
