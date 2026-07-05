@@ -1,3 +1,4 @@
+pub mod apply;
 pub mod bind;
 pub mod client;
 mod cors;
@@ -9,6 +10,7 @@ mod server;
 mod test_server;
 pub mod types;
 
+pub use apply::{apply_preset_to_arc, apply_preset_to_state, ApplyPresetStateError};
 pub use bind::{dashboard_api_base_url, resolve_bind_addr, DEFAULT_BIND_HOST, DEFAULT_PORT};
 pub use client::{PeerClient, PeerClientError};
 pub use handlers::AppState;
@@ -21,8 +23,7 @@ use axum::{
     Router,
 };
 
-pub fn router(state: AppState) -> Router {
-    let state = Arc::new(state);
+pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(handlers::health))
         .route("/status", get(handlers::status))
@@ -42,15 +43,13 @@ mod tests {
     use crate::config::Config;
 
     fn app_with_config() -> Router {
-        router(AppState::from_load_result(Ok(test_config())))
+        router(Arc::new(AppState::from_load_result(Ok(test_config()))))
     }
 
     fn app_without_config() -> Router {
-        router(AppState::from_load_result(Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "deskmux.config.json",
-        )
-        .into())))
+        router(Arc::new(AppState::from_load_result(Err(
+            std::io::Error::new(std::io::ErrorKind::NotFound, "deskmux.config.json").into(),
+        ))))
     }
 
     async fn get_with_origin(
@@ -326,7 +325,7 @@ mod tests {
             .get_mut("device-a")
             .unwrap()
             .command = "exit 1".to_string();
-        let app = router(AppState::from_load_result(Ok(config)));
+        let app = router(Arc::new(AppState::from_load_result(Ok(config))));
         post_json(
             &app,
             "/apply-preset",

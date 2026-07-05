@@ -15,6 +15,7 @@ Core switching, API, coordination, and dashboard apply/status are done. Config e
 - [x] Local HTTP API (`/health`, `/status`, `POST /apply-preset`)
 - [x] LAN peer coordination (`controlledBy`, coordinated apply, peer fan-out)
 - [x] Dashboard UI: load status, apply presets (dry-run on by default), structured apply results
+- [x] System tray + global hotkeys (apply presets from tray menu or configured shortcuts)
 - [ ] Dashboard UI: add / remove / reorder machines and monitors; edit presets in UI
 - [ ] Live logs / richer execution history in the dashboard
 
@@ -34,7 +35,6 @@ Phase 2 replaces the *requirement* for external monitor tools on supported displ
   - power / standby (where supported)
   - other DDC/CI VCP controls the display actually exposes
   - Not every control is available on every monitor; DeskMux will surface what the hardware supports.
-- [ ] System tray + global hotkeys (switch presets without opening the window)
 - [ ] Peer auto-discovery on the LAN (mDNS/similar), so peers don't have to be hand-configured with IPs
 
 ## Phase 3 — Keyboard, mouse, and smart handoff

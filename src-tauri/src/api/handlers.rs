@@ -7,9 +7,8 @@ use axum::{
 };
 
 use crate::config::{Config, LoadError};
-use crate::executor::ExecutorError;
-use crate::orchestrator::{apply_preset, PeerClientAdapter};
 
+use super::apply::{apply_preset_to_state, ApplyPresetStateError};
 use super::types::{
     ApplyPresetRequest, ApplyPresetResponse, ErrorResponse, HealthResponse, MonitorSummary,
     PresetSummary, StatusResponse,
@@ -99,38 +98,22 @@ pub async fn apply_preset_handler(
         return Err(bad_request("preset name is required"));
     }
 
-    let config = state
+    state
         .config
         .as_ref()
         .ok_or_else(|| config_not_loaded(&state))?;
 
-    let peer_client = PeerClientAdapter;
-    match apply_preset(
-        config,
-        &body.preset,
-        body.dry_run,
-        body.local_only,
-        &peer_client,
-    )
-    .await
-    {
-        Ok(result) => {
-            if !body.dry_run && result.is_full_success() {
-                *state
-                    .last_applied_preset
-                    .lock()
-                    .expect("last_applied_preset lock poisoned") = Some(body.preset.clone());
-            }
-            Ok(Json(ApplyPresetResponse {
-                preset: result.preset,
-                dry_run: result.dry_run,
-                local_only: result.local_only,
-                planning_errors: result.planning_errors,
-                local_results: result.local_results,
-                peer_results: result.peer_results,
-            }))
-        }
-        Err(ExecutorError::PresetNotFound { preset_name }) => {
+    match apply_preset_to_state(&state, &body.preset, body.dry_run, body.local_only).await {
+        Ok(result) => Ok(Json(ApplyPresetResponse {
+            preset: result.preset,
+            dry_run: result.dry_run,
+            local_only: result.local_only,
+            planning_errors: result.planning_errors,
+            local_results: result.local_results,
+            peer_results: result.peer_results,
+        })),
+        Err(ApplyPresetStateError::ConfigNotLoaded) => Err(config_not_loaded(&state)),
+        Err(ApplyPresetStateError::PresetNotFound { preset_name }) => {
             Err(not_found(format!("preset '{preset_name}' does not exist")))
         }
     }
