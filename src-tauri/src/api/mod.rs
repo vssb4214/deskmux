@@ -1,5 +1,6 @@
 pub mod bind;
 pub mod client;
+mod cors;
 mod handlers;
 #[cfg(test)]
 mod peer_orchestration;
@@ -26,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(handlers::health))
         .route("/status", get(handlers::status))
         .route("/apply-preset", post(handlers::apply_preset_handler))
+        .layer(cors::dashboard_cors_layer())
         .with_state(state)
 }
 
@@ -33,11 +35,102 @@ pub fn router(state: AppState) -> Router {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::http::{header, HeaderValue, Request, StatusCode};
     use axum::Router;
     use tower::ServiceExt;
 
     use crate::config::Config;
+
+    async fn get_with_origin(
+        app: &Router,
+        uri: &str,
+        origin: &str,
+    ) -> (StatusCode, axum::http::HeaderMap, serde_json::Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .header(header::ORIGIN, origin)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
+        (status, headers, json)
+    }
+
+    async fn options_preflight(
+        app: &Router,
+        uri: &str,
+        origin: &str,
+    ) -> (StatusCode, axum::http::HeaderMap) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri(uri)
+                    .header(header::ORIGIN, origin)
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        (response.status(), response.headers().clone())
+    }
+
+    #[tokio::test]
+    async fn cors_allows_localhost_dev_origin_on_status() {
+        let app = router(AppState::new(Some(test_config())));
+        let (status, headers, _) = get_with_origin(&app, "/status", "http://127.0.0.1:1430").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+            Some(&HeaderValue::from_static("http://127.0.0.1:1430"))
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_allows_localhost_hostname_on_status() {
+        let app = router(AppState::new(Some(test_config())));
+        let (status, headers, _) = get_with_origin(&app, "/status", "http://localhost:1430").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+            Some(&HeaderValue::from_static("http://localhost:1430"))
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_rejects_untrusted_origin() {
+        let app = router(AppState::new(Some(test_config())));
+        let (status, headers, _) = get_with_origin(&app, "/status", "http://evil.example").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+    }
+
+    #[tokio::test]
+    async fn cors_options_preflight_for_apply_preset() {
+        let app = router(AppState::new(Some(test_config())));
+        let (status, headers) =
+            options_preflight(&app, "/apply-preset", "http://127.0.0.1:1430").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+            Some(&HeaderValue::from_static("http://127.0.0.1:1430"))
+        );
+        assert!(headers.get(header::ACCESS_CONTROL_ALLOW_METHODS).is_some());
+    }
 
     fn test_config() -> Config {
         let json = r#"{
