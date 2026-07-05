@@ -26,6 +26,7 @@
  *   deviceId: string,
  *   command: string | null,
  *   executed: boolean,
+ *   isNativeDdc: boolean,
  *   outcome: MonitorOutcome
  * }} MonitorResult
  * @typedef {{ host: string, port: number }} PeerRef

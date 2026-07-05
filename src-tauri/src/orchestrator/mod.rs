@@ -216,6 +216,7 @@ mod tests {
                 device_id: "device-b".to_string(),
                 command: Some("cmd".to_string()),
                 executed: false,
+                is_native_ddc: false,
                 outcome: MonitorOutcome::DryRun,
             }],
             peer_results: vec![],

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::executor::{MonitorOutcome, MonitorResult};
+use crate::executor::MonitorOutcome;
 use crate::orchestrator::{apply_preset, CoordinatedApplyResult, PeerClientAdapter};
 
 use super::events::{
@@ -78,7 +78,7 @@ fn record_apply_outcome(
         &failed_monitors,
     );
     for monitor_result in &result.local_results {
-        if is_native_ddc_result(monitor_result) {
+        if monitor_result.is_native_ddc {
             let success = monitor_outcome_ok(&monitor_result.outcome);
             record_native_ddc_result(
                 &state.events,
@@ -89,13 +89,6 @@ fn record_apply_outcome(
             );
         }
     }
-}
-
-fn is_native_ddc_result(result: &MonitorResult) -> bool {
-    result
-        .command
-        .as_deref()
-        .is_some_and(|cmd| cmd.starts_with("native DDC:"))
 }
 
 fn monitor_outcome_ok(outcome: &MonitorOutcome) -> bool {
@@ -133,6 +126,7 @@ mod tests {
 
     use crate::api::events::{EventKind, MAX_EVENTS};
     use crate::config::Config;
+    use crate::executor::MonitorResult;
 
     fn test_config() -> Config {
         let json = r#"{
@@ -202,5 +196,40 @@ mod tests {
         let events = state.events.lock().unwrap().recent(MAX_EVENTS);
         assert!(events.iter().any(|e| e.message.contains("started")));
         assert!(events.iter().any(|e| e.kind == EventKind::Success));
+    }
+
+    /// Regression guard: native-DDC event recording must key off `MonitorResult.is_native_ddc`,
+    /// not sniff the `command` display string for a `"native DDC:"` prefix. This result's
+    /// `command` is deliberately reworded — if detection ever regresses to string-sniffing
+    /// (`backend.rs`'s `display_command` format changes, or someone reintroduces
+    /// `starts_with`), this test fails while the field-based check keeps working.
+    #[tokio::test]
+    async fn native_ddc_event_fires_even_if_display_string_is_reworded() {
+        let state = Arc::new(AppState::from_load_result(Ok(test_config())));
+        let result = CoordinatedApplyResult {
+            preset: "all_a".to_string(),
+            dry_run: false,
+            local_only: true,
+            planning_errors: vec![],
+            local_results: vec![MonitorResult {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-a".to_string(),
+                command: Some("totally reworded display text, no magic prefix".to_string()),
+                executed: true,
+                is_native_ddc: true,
+                outcome: MonitorOutcome::Success {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            }],
+            peer_results: vec![],
+        };
+
+        record_apply_outcome(&state, "all_a", false, ApplySource::Api, &result);
+
+        let events = state.events.lock().unwrap().recent(MAX_EVENTS);
+        assert!(events
+            .iter()
+            .any(|e| e.message.contains("Native DDC input switch succeeded")));
     }
 }
