@@ -27,9 +27,11 @@ cp deskmux.config.example.json deskmux.config.json
 | `monitors[].label`         | string | Human-readable name shown in the UI.                                          |
 | `monitors[].order`         | number | Display order in the UI (lower = first).                                       |
 | `monitors[].controlledBy`  | string | Optional. Device id that runs input-switch commands for this monitor. Defaults to this config's `deviceName` at apply/validation time (not a serde default — see below). |
-| `monitors[].inputs`        | object | Map of **device id** → `{ type, command }`. Required for locally owned monitors; omit for remote-owned stubs on a coordinator. |
+| `monitors[].nativeDdc`     | object | Optional. `{ displayId }` — this monitor's identity for native DDC/CI control (Windows only for now). Required if any of this monitor's `inputs[].nativeDdc` is set. See [Native DDC/CI input switching](#native-ddcci-input-switching-nativeddc) below. |
+| `monitors[].inputs`        | object | Map of **device id** → `{ type, command?, nativeDdc? }`. Required for locally owned monitors; omit for remote-owned stubs on a coordinator. |
 | `inputs.<deviceId>.type`   | string | Connector type, informational (`hdmi`, `displayport`, `usb-c`).               |
-| `inputs.<deviceId>.command`| string | Shell command that selects this input on this monitor.                         |
+| `inputs.<deviceId>.command`| string | Shell command that selects this input on this monitor. Optional if `nativeDdc` is set instead — but at least one of the two is required. |
+| `inputs.<deviceId>.nativeDdc` | object | Optional. `{ inputSourceValue }` — the VCP input-source value (code `0x60`) that selects this device's input via native DDC/CI. Requires the parent monitor's `nativeDdc.displayId`. |
 | `presets`                  | object | Map of preset name → `{ label, layout }`.                                    |
 | `presets.<name>.layout`    | object | Map of `monitorId` → `deviceId`.                                              |
 | `hotkeys`                  | object | Optional. Map of **preset name** → global shortcut string (desktop only).      |
@@ -88,6 +90,37 @@ The owning peer's config carries the real `inputs` and runs the command when the
 - Locally owned monitors (`controlledBy == deviceName`): require `inputs`; each preset layout entry targeting a device must have a matching input command on that monitor.
 - Remote-owned stubs (`controlledBy != deviceName`): `inputs` may be omitted; preset validation only checks that the layout's target `deviceId` exists in `devices[]`. The owning peer validates and executes its local command.
 - `peers[].name` must match a `devices[].id` and must not equal `deviceName`.
+
+## Native DDC/CI input switching (`nativeDdc`)
+
+**Status: foundation only, input switching, Windows only.** An alternative to the shell `command` for switching a monitor's input, talking to the monitor directly over DDC/CI via the Windows Monitor Configuration API instead of shelling out to a tool. Opt-in per input — existing shell-only configs are unaffected, and shell commands remain a permanent fallback for displays that don't support this (see [Limitations](../README.md#limitations)).
+
+```json
+{
+  "id": "monitor1",
+  "label": "Left Monitor",
+  "order": 0,
+  "nativeDdc": { "displayId": "DEL4176:0" },
+  "inputs": {
+    "windows-pc": {
+      "type": "displayport",
+      "command": "C:\\Tools\\ControlMyMonitor.exe /SetValue \"\\\\.\\DISPLAY1\\Monitor0\" 60 15",
+      "nativeDdc": { "inputSourceValue": 15 }
+    },
+    "mac-mini": { "type": "hdmi", "command": "betterdisplaycli set --name=\"LG HDR 4K\" --inputSource=hdmi1" }
+  }
+}
+```
+
+**`monitors[].nativeDdc.displayId`** identifies the physical monitor, derived from its EDID (manufacturer id + product code, correlated with a per-connection identifier) rather than enumeration order or the Windows device name (`\\.\DISPLAY1`) — both of those can silently reassign across reboots, sleep/wake, or just plugging monitors in a different order. DeskMux logs detected displays and their `displayId` at startup (Windows only) so you can copy the right value into your config instead of guessing.
+
+**Known limitation:** the API DeskMux uses doesn't expose a true per-unit EDID serial number, only manufacturer + product code + a connection-derived identifier. **Two identical monitor models on the same machine can end up with the same `displayId`** and be indistinguishable to DeskMux. If you own two of the exact same monitor, native DDC input switching may not reliably tell them apart yet — use the shell `command` for those monitors instead until per-unit serial matching is added.
+
+**`inputs.<deviceId>.nativeDdc.inputSourceValue`** is the VCP input-source value (code `0x60`) that selects this device's input — the same number you'd read off the monitor for a shell-based `command`, just structured instead of embedded in a command string. DeskMux doesn't guess this value any more than it guesses shell commands.
+
+**This is input-source switching only.** There's deliberately no field for an arbitrary VCP code — brightness, contrast, volume, and power are separate future capabilities with their own config fields when they're built, not something you can reach through `nativeDdc` today.
+
+**Platform behavior:** if an input sets `nativeDdc` but this build can't run it (non-Windows, for now), DeskMux falls back to that input's `command` if one is set, or reports a clear resolution error if not. A native operation that runs but fails (display not found, monitor rejects the write) is reported as a failed result, the same as a shell command that exits non-zero — it never silently falls back to the shell command.
 
 ## Peer coordination
 
