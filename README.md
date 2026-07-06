@@ -15,9 +15,10 @@ If you run two machines into the same set of monitors, switching "who's driving 
 - **Preset switching** — define layouts once (All PC, All Mac, splits, custom) and apply them with one click.
 - **Config-driven** — monitors, inputs, and switch commands live in `deskmux.config.json`. Nothing about your hardware is baked into the code.
 - **Dry-run mode** — enabled by default in the dashboard; preview resolved commands before anything runs. Uncheck to execute.
-- **Local API + LAN coordination** — `/health`, `/status`, and coordinated preset apply over HTTP (`controlledBy`, peer fan-out). No auth yet; LAN bind is opt-in.
+- **Local API + LAN coordination** — `/health`, `/status`, `/events`, and coordinated preset apply over HTTP (`controlledBy`, peer fan-out). No auth yet; LAN bind is opt-in.
 - **System tray + global hotkeys** — apply presets from the tray menu or optional `hotkeys` in config (desktop only).
 - **Execution logs** — every command's stdout/stderr surfaces in the UI so failures are obvious.
+- **Recent events** — a rolling history (config loads, preset applies, native-DDC results) on the dashboard, sourced from `/events`.
 
 ## Requirements
 
@@ -84,7 +85,7 @@ Phased so every step is a usable tool on its own, toward an all-in-one desktop c
 - [x] Dashboard apply/status UI (dry-run on by default)
 - [x] System tray + global hotkeys (desktop)
 - [ ] Dashboard config editing (machines, monitors, presets in UI)
-- [ ] Live logs / richer execution history
+- [x] Live logs / richer execution history
 
 **Next — native monitor control (not implemented yet)**
 - [ ] Built-in DDC/CI: input source, brightness, contrast, and other VCP controls where the monitor exposes them — no required external tool on supported displays

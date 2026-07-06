@@ -16,7 +16,7 @@ Requires Node.js 20+ and a stable Rust toolchain.
 
 ## Branching
 
-- Branch off `main`. Name branches by intent: `feat/preset-executor`, `fix/config-validation`, `docs/config-examples`.
+- Branch off `master`. Name branches by intent: `feat/preset-executor`, `fix/config-validation`, `docs/config-examples`.
 - Keep each branch to one change.
 
 ## Commits
@@ -43,4 +43,4 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Scope
 
-DeskMux's MVP is monitor input switching and preset orchestration. Peripheral streaming and native DDC are roadmap items, not yet in scope — open an issue before starting work on either.
+DeskMux's MVP is monitor input switching and preset orchestration, including native DDC/CI on Windows. Keyboard/mouse sharing and smart handoff are roadmap items, not yet in scope — open an issue before starting work on either (see `docs/ROADMAP.md`).

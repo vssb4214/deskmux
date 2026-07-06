@@ -17,7 +17,7 @@ Core switching, API, coordination, and dashboard apply/status are done. Config e
 - [x] Dashboard UI: load status, apply presets (dry-run on by default), structured apply results
 - [x] System tray + global hotkeys (apply presets from tray menu or configured shortcuts)
 - [ ] Dashboard UI: add / remove / reorder machines and monitors; edit presets in UI
-- [ ] Live logs / richer execution history in the dashboard
+- [x] Live logs / richer execution history in the dashboard (`GET /events`, 50-entry ring buffer, Recent Events card)
 
 Phase 1 uses external monitor-control tools (ControlMyMonitor, ddcutil, BetterDisplay, Lunar, and similar) as **temporary backend adapters** via configured shell commands, so DeskMux is useful immediately. **This is not the end goal.** The long-term goal is for DeskMux to provide native monitor control directly and become an all-in-one suite rather than a wrapper.
 
