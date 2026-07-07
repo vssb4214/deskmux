@@ -148,20 +148,39 @@ pub fn record_apply_finished(
 pub fn record_native_ddc_result(
     events: &Mutex<EventLog>,
     monitor_id: &str,
-    success: bool,
+    dry_run: bool,
+    outcome_ok: bool,
     preset: Option<&str>,
     source: Option<ApplySource>,
 ) {
     let mut log = events.lock().expect("event log lock poisoned");
-    let (kind, verb) = if success {
-        (EventKind::Success, "succeeded")
+    let (kind, message) = if dry_run {
+        if outcome_ok {
+            (
+                EventKind::Info,
+                format!("Dry-run: would switch native DDC input on monitor '{monitor_id}'"),
+            )
+        } else {
+            (
+                EventKind::Error,
+                format!("Dry-run: native DDC input switch would fail on monitor '{monitor_id}'"),
+            )
+        }
+    } else if outcome_ok {
+        (
+            EventKind::Success,
+            format!("Native DDC input switch succeeded on monitor '{monitor_id}'"),
+        )
     } else {
-        (EventKind::Error, "failed")
+        (
+            EventKind::Error,
+            format!("Native DDC input switch failed on monitor '{monitor_id}'"),
+        )
     };
     log.push(DeskMuxEvent {
         timestamp_ms: now_ms(),
         kind,
-        message: format!("Native DDC input switch {verb} on monitor '{monitor_id}'"),
+        message,
         preset: preset.map(str::to_string),
         source,
         monitor_id: Some(monitor_id.to_string()),
