@@ -1,6 +1,9 @@
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum ConfigError {
     DeviceNameNotFound {
         device_name: String,
@@ -167,7 +170,7 @@ impl std::error::Error for ConfigError {}
 
 /// A collection of every problem found in a config, so a user sees all of
 /// them at once instead of fixing one and re-running to find the next.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigErrors(pub Vec<ConfigError>);
 
 impl fmt::Display for ConfigErrors {
@@ -221,5 +224,34 @@ impl From<serde_json::Error> for LoadError {
 impl From<ConfigErrors> for LoadError {
     fn from(err: ConfigErrors) -> Self {
         LoadError::Invalid(err)
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum LoadErrorSer<'a> {
+    Io { message: String },
+    Parse { message: String },
+    Invalid { errors: &'a [ConfigError] },
+}
+
+impl Serialize for LoadError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            LoadError::Io(err) => LoadErrorSer::Io {
+                message: err.to_string(),
+            }
+            .serialize(serializer),
+            LoadError::Parse(err) => LoadErrorSer::Parse {
+                message: err.to_string(),
+            }
+            .serialize(serializer),
+            LoadError::Invalid(errors) => {
+                LoadErrorSer::Invalid { errors: &errors.0 }.serialize(serializer)
+            }
+        }
     }
 }

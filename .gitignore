@@ -1,5 +1,10 @@
 # DeskMux — local, machine-specific config
 deskmux.config.json
+deskmux.config.json.bak
+deskmux.config.json.tmp
+src-tauri/deskmux.config.json
+src-tauri/deskmux.config.json.bak
+src-tauri/deskmux.config.json.tmp
 
 # Node
 node_modules/
