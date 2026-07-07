@@ -97,8 +97,12 @@ export function renderSetupChecklist(steps, listEl) {
 /**
  * @param {HTMLElement} container
  * @param {import('../lib/setup-session.js').SetupSession} session
+ * @param {{
+ *   getMonitorName?: (displayId: string) => string,
+ *   onInputLabelChange?: (displayId: string, label: string) => void,
+ * } | undefined} [options]
  */
-export function renderCapturedReadings(container, session) {
+export function renderCapturedReadings(container, session, options) {
   container.replaceChildren();
 
   if (!session.readings?.length) {
@@ -116,8 +120,11 @@ export function renderCapturedReadings(container, session) {
     const item = document.createElement('li');
     item.className = 'captured-reading-card';
 
+    const monitorName =
+      options?.getMonitorName?.(reading.displayId) ?? reading.label ?? reading.displayId;
+
     const title = document.createElement('strong');
-    title.textContent = reading.label;
+    title.textContent = monitorName;
 
     const display = document.createElement('p');
     display.className = 'meta-line';
@@ -125,9 +132,30 @@ export function renderCapturedReadings(container, session) {
 
     const value = document.createElement('p');
     value.className = 'meta-line';
-    value.textContent = `Input value: ${reading.current} (max ${reading.maximum})`;
+    value.textContent = `Input value: ${reading.current}`;
 
     item.append(title, display, value);
+
+    if (options?.onInputLabelChange) {
+      const inputField = document.createElement('label');
+      inputField.className = 'field setup-name-field';
+
+      const inputLabel = document.createElement('span');
+      inputLabel.textContent = 'Input label';
+
+      const inputControl = document.createElement('input');
+      inputControl.type = 'text';
+      inputControl.className = 'text-input';
+      inputControl.placeholder = 'e.g. Desktop or MacBook';
+      inputControl.value = reading.inputLabel ?? session.deviceName ?? '';
+      inputControl.addEventListener('input', () => {
+        options.onInputLabelChange?.(reading.displayId, inputControl.value);
+      });
+
+      inputField.append(inputLabel, inputControl);
+      item.appendChild(inputField);
+    }
+
     list.appendChild(item);
   }
 
@@ -162,7 +190,11 @@ export function renderSetupDraftErrors(container, errors) {
 
 /**
  * @param {HTMLElement} container
- * @param {string} summary
+ * @param {{
+ *   deviceLabel: string,
+ *   monitorLabels: string[],
+ *   presetLabel: string,
+ * }} summary
  */
 export function renderDraftSummary(container, summary) {
   container.replaceChildren();
@@ -172,11 +204,23 @@ export function renderDraftSummary(container, summary) {
   title.className = 'setup-draft-summary-title';
   title.textContent = 'Generated draft summary';
 
-  const body = document.createElement('p');
-  body.className = 'meta-line';
-  body.textContent = summary;
+  const list = document.createElement('ul');
+  list.className = 'setup-draft-summary-list';
 
-  container.append(title, body);
+  const entries = [
+    ['Device', summary.deviceLabel],
+    ['Monitors', summary.monitorLabels.join(', ')],
+    ['Preset', summary.presetLabel],
+  ];
+
+  for (const [label, value] of entries) {
+    const item = document.createElement('li');
+    item.className = 'meta-line';
+    item.textContent = `${label}: ${value}`;
+    list.appendChild(item);
+  }
+
+  container.append(title, list);
 }
 
 /**

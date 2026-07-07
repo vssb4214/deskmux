@@ -8,13 +8,16 @@ Goal: someone new can go from zero to a working `deskmux.config.json` without ha
 
 When DeskMux starts without a valid config, open the desktop app and follow **Set up DeskMux**:
 
-1. **Name this computer** — becomes `deviceName` and the matching `devices[]` entry.
-2. **Detect monitors** — uses `GET /native-ddc/displays` on Windows.
-3. **Capture input values** — switch each monitor physically, click **Read current input**, note the value.
-4. **Generate config draft** — builds starter JSON from captured readings.
-5. **Validate and save** — open **Advanced options**, review JSON, then validate/save via desktop IPC.
-6. **Restart DeskMux** — quit and reopen so the new config loads.
-7. **Test a preset** — apply with dry-run first.
+1. **Name this computer** — readable label and derived config id (for example “Gaming PC” → `gaming_pc`).
+2. **Detect monitors** — uses `GET /native-ddc/displays` on Windows; name each display (for example “Left monitor”).
+3. **Capture input values** — switch each monitor physically, click **Read current input**, optionally label the capture (for example “Desktop”).
+4. **Name your preset** — defaults to “All {computer name}”; generates a readable preset id (for example `all_gaming_pc`).
+5. **Generate config draft** — builds starter JSON using your names, not generic `monitor1` placeholders.
+6. **Validate and save** — open **Advanced options**, review JSON if needed, then validate/save via desktop IPC.
+7. **Restart DeskMux** — quit and reopen so the new config loads.
+8. **Test a preset** — apply with dry-run first.
+
+Generated configs use your labels for `devices[]`, `monitors[]`, and `presets`. Manual JSON editing remains available under **Advanced options**.
 
 Restart is required after save; there is no hot reload.
 

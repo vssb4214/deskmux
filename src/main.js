@@ -11,13 +11,23 @@ import {
 import { buildSetupChecklist } from './lib/setup-checklist.js';
 import { buildConfigDraftFromSetupState } from './lib/setup-draft.js';
 import {
+  defaultPresetLabel,
+  makeDeviceId,
+  makeMonitorId,
+  makePresetId,
+} from './lib/setup-names.js';
+import {
   createSetupSession,
+  getEffectiveMonitorName,
   markDraftGenerated,
   markSaveSucceeded,
   markSetupStarted,
   recordReading,
   setDeviceName,
   setDisplays,
+  setMonitorName,
+  setPresetLabel,
+  setReadingInputLabel,
 } from './lib/setup-session.js';
 import { deriveSetupStatus } from './lib/setup-status.js';
 import { isTauriDesktop } from './lib/tauri.js';
@@ -83,11 +93,14 @@ const els = {
   setupChecklistCard: document.getElementById('setup-checklist-card'),
   setupChecklist: document.getElementById('setup-checklist'),
   deviceNameInput: /** @type {HTMLInputElement} */ (document.getElementById('device-name-input')),
+  deviceIdPreview: document.getElementById('device-id-preview'),
   discoveryPanel: document.getElementById('discovery-panel'),
   detectBtn: /** @type {HTMLButtonElement} */ (document.getElementById('detect-btn')),
   capturedReadingsPanel: document.getElementById('captured-readings-panel'),
   generateDraftBtn: /** @type {HTMLButtonElement} */ (document.getElementById('generate-draft-btn')),
   generateDraftErrors: document.getElementById('generate-draft-errors'),
+  presetLabelInput: /** @type {HTMLInputElement} */ (document.getElementById('preset-label-input')),
+  presetIdPreview: document.getElementById('preset-id-preview'),
   draftSummaryPanel: document.getElementById('draft-summary-panel'),
   configDraftPanel: document.getElementById('config-draft-panel'),
   statusPanel: document.getElementById('status-panel'),
@@ -138,6 +151,37 @@ function getConfigDraftTextarea() {
   );
 }
 
+function getEffectivePresetLabel() {
+  if (setupSession.presetLabel?.trim()) {
+    return setupSession.presetLabel.trim();
+  }
+  return defaultPresetLabel(setupSession.deviceName ?? '');
+}
+
+function updateNamingPreviews() {
+  const deviceName = setupSession.deviceName?.trim() ?? '';
+  if (els.deviceIdPreview) {
+    els.deviceIdPreview.textContent = deviceName
+      ? `Config id: ${makeDeviceId(deviceName)}`
+      : '';
+  }
+
+  const presetLabel = getEffectivePresetLabel();
+  if (els.presetIdPreview) {
+    els.presetIdPreview.textContent = presetLabel
+      ? `Config id: ${makePresetId(presetLabel)}`
+      : '';
+  }
+}
+
+function getMonitorNameForDisplay(displayId) {
+  const index = (setupSession.displays ?? []).findIndex(
+    (display) => display.displayId === displayId,
+  );
+  const display = index >= 0 ? setupSession.displays?.[index] : undefined;
+  return getEffectiveMonitorName(display, Math.max(index, 0));
+}
+
 function renderDashboardChrome() {
   const setupStatus = getSetupStatus();
   const configLoaded = Boolean(currentHealth?.configLoaded);
@@ -164,10 +208,24 @@ function renderDashboardChrome() {
       nativeAvailable,
     });
     renderSetupChecklist(steps, els.setupChecklist);
-    renderCapturedReadings(els.capturedReadingsPanel, setupSession);
+    renderCapturedReadings(els.capturedReadingsPanel, setupSession, {
+      getMonitorName: getMonitorNameForDisplay,
+      onInputLabelChange: (displayId, label) => {
+        setupSession = setReadingInputLabel(setupSession, displayId, label);
+      },
+    });
     if (els.deviceNameInput.value !== (setupSession.deviceName ?? '')) {
       els.deviceNameInput.value = setupSession.deviceName ?? '';
     }
+    const effectivePreset = getEffectivePresetLabel();
+    if (
+      els.presetLabelInput &&
+      els.presetLabelInput.value !== effectivePreset &&
+      document.activeElement !== els.presetLabelInput
+    ) {
+      els.presetLabelInput.value = effectivePreset;
+    }
+    updateNamingPreviews();
   }
 
   if (els.eventsDetails) {
@@ -240,9 +298,19 @@ async function detectDisplays() {
       els.discoveryPanel,
       data,
       (displayId, readingEl, buttonEl) => {
-        const display = displays.find((entry) => entry.displayId === displayId);
-        const label = display?.label ?? displayId;
+        const label = getMonitorNameForDisplay(displayId);
         void readDisplayInput(displayId, label, readingEl, buttonEl);
+      },
+      {
+        getMonitorName: (displayId, index) => {
+          const display = setupSession.displays?.[index];
+          return getEffectiveMonitorName(display, index);
+        },
+        onMonitorNameChange: (displayId, name) => {
+          setupSession = setMonitorName(setupSession, displayId, name);
+          renderDashboardChrome();
+        },
+        previewMonitorId: (_displayId, index, name) => makeMonitorId(name, index),
       },
     );
     renderDashboardChrome();
@@ -371,12 +439,7 @@ function generateDraftFromSetup() {
   setupSession = markDraftGenerated(setupSession);
   populateConfigDraftTextarea(result.json);
 
-  const deviceLabel = setupSession.deviceName?.trim() ?? 'this computer';
-  const monitorCount = setupSession.readings?.length ?? 0;
-  renderDraftSummary(
-    els.draftSummaryPanel,
-    `Draft for ${deviceLabel} with ${monitorCount} monitor(s) and one default preset.`,
-  );
+  renderDraftSummary(els.draftSummaryPanel, result.summary);
   renderDashboardChrome();
 
   document.getElementById('advanced-details')?.scrollIntoView({
@@ -503,6 +566,11 @@ async function main() {
 
   els.detectBtn.addEventListener('click', () => {
     void detectDisplays();
+  });
+
+  els.presetLabelInput?.addEventListener('input', () => {
+    setupSession = setPresetLabel(setupSession, els.presetLabelInput.value);
+    updateNamingPreviews();
   });
 
   els.generateDraftBtn.addEventListener('click', () => {

@@ -61,16 +61,20 @@
         <div id="setup-step-panels" class="setup-step-panels">
           <div id="setup-step-name" class="setup-step-panel">
             <h3>Step 1 — Name this computer</h3>
+            <p class="helper">
+              Use a name you will recognize later, like “Gaming PC” or “Work laptop”.
+            </p>
             <label class="field">
               <span>Computer name</span>
               <input
                 id="device-name-input"
                 type="text"
                 class="text-input"
-                placeholder="e.g. Windows PC"
+                placeholder="e.g. Gaming PC"
                 autocomplete="off"
               />
             </label>
+            <p id="device-id-preview" class="meta-line muted setup-id-preview"></p>
           </div>
 
           <div id="setup-step-detect" class="setup-step-panel">
@@ -92,7 +96,8 @@
             <h3>Step 3 — Capture input values</h3>
             <p class="helper setup-capture-instruction">
               Switch the monitor to the input you want to capture, then click Read current
-              input for that display.
+              input for that display. Label each capture so the generated config reads like
+              your desk — for example “Desktop” or “MacBook”.
             </p>
             <div id="captured-readings-panel"></div>
           </div>
@@ -100,8 +105,20 @@
           <div id="setup-step-generate" class="setup-step-panel">
             <h3>Step 4 — Generate config draft</h3>
             <p class="helper">
-              Build a starter config from the computer name and captured input values.
+              Name your default preset, then build a starter config from the names and
+              captured input values.
             </p>
+            <label class="field">
+              <span>Preset name</span>
+              <input
+                id="preset-label-input"
+                type="text"
+                class="text-input"
+                placeholder="e.g. All Gaming PC"
+                autocomplete="off"
+              />
+            </label>
+            <p id="preset-id-preview" class="meta-line muted setup-id-preview"></p>
             <button id="generate-draft-btn" type="button" class="btn btn-secondary">
               Generate config draft
             </button>

@@ -4,13 +4,15 @@
  * @typedef {{
  *   started?: boolean,
  *   deviceName?: string,
- *   displays?: Array<{ displayId: string, label: string }>,
+ *   displays?: Array<{ displayId: string, label: string, name?: string }>,
  *   readings?: Array<{
  *     displayId: string,
  *     label: string,
  *     current: number,
  *     maximum: number,
+ *     inputLabel?: string,
  *   }>,
+ *   presetLabel?: string,
  *   saveSucceeded?: boolean,
  *   generatedDraft?: boolean,
  * }} SetupSession
