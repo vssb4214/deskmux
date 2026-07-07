@@ -8,7 +8,28 @@ cp deskmux.config.example.json deskmux.config.json
 
 `deskmux.config.json` is gitignored — it describes *your* desk, so it stays out of the repo.
 
-## Schema
+Sibling files `deskmux.config.json.bak` and `deskmux.config.json.tmp` may appear briefly during save from the desktop app; they are gitignored too.
+
+## Saving from the desktop app (Tauri IPC)
+
+Config drafting and save are **desktop-only** — they use Tauri IPC, not the HTTP API. There is no `POST /config/validate` or config-write HTTP endpoint; LAN peers and browser-only dashboard viewers cannot validate or save config over HTTP.
+
+From the DeskMux window, the **Config draft** card lets you paste or edit JSON, **Validate**, then **Save**. This is temporary plumbing before the full first-run wizard.
+
+| IPC command | Args | Result |
+|-------------|------|--------|
+| `validate_config_draft` | `{ json: string }` | `null` on success; structured `LoadError` on failure |
+| `save_config_draft` | `{ json: string }` | `{ filename, backupCreated, restartRequired }` on success |
+
+**Save behavior:**
+
+1. Parse JSON and run the same `validate()` used at startup — invalid drafts return errors; the file on disk is untouched.
+2. If `deskmux.config.json` already exists, copy it to `deskmux.config.json.bak` first. If the backup fails, the save aborts and the original file is not overwritten.
+3. Write pretty-printed JSON to `deskmux.config.json.tmp`, then rename into `deskmux.config.json` (atomic on Windows and POSIX).
+4. Return `restartRequired: true`. DeskMux does **not** hot-reload config — restart the app for the new file to take effect.
+
+The save path is fixed (`deskmux.config.json` in the app working directory). IPC commands do not accept a path argument.
+
 
 | Field                      | Type    | Description                                                                    |
 |----------------------------|---------|--------------------------------------------------------------------------------|

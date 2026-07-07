@@ -78,14 +78,16 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 | Event history API | Done |
 | Discovery read API | Done — `GET /native-ddc/displays`, `GET /native-ddc/displays/{id}/input-source` (see [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)) |
 | Discovery dashboard panel (read-only) | Done — "Monitor discovery" card |
+| Config draft validate/save (Tauri IPC) | Done — minimal "Config draft" dashboard card; full wizard still planned |
 | Dashboard wizard UI | Not started |
-| Config write from app | Not started (today config is file-only, gitignored). Decision: save goes through a Tauri IPC command, not an HTTP endpoint — fixed path, atomic tmp+rename, validate-before-write, `.bak` backup, explicit confirm |
 
 ## Config write safety
 
-- Atomic write: `deskmux.config.json.tmp` → rename.
-- Validate before save; show errors inline.
-- Never overwrite without explicit user confirm if a file already exists.
+- Atomic write: `deskmux.config.json.tmp` → rename to `deskmux.config.json`.
+- Validate before save; show errors inline in the dashboard card.
+- If a config file already exists, copy to `deskmux.config.json.bak` before overwrite (abort if backup fails).
+- Desktop-only Tauri IPC (`validate_config_draft`, `save_config_draft`) — no HTTP validate or write endpoints.
+- Restart DeskMux after save; no hot-reload in the current implementation.
 - Do not commit generated config to git.
 
 ## Out of scope for v1 wizard

@@ -19,6 +19,7 @@ If you run two machines into the same set of monitors, switching "who's driving 
 - **System tray + global hotkeys** — apply presets from the tray menu or optional `hotkeys` in config (desktop only).
 - **Execution logs** — every command's stdout/stderr surfaces in the UI so failures are obvious.
 - **Recent events** — a rolling history (config loads, preset applies, native-DDC results) on the dashboard, sourced from `/events`.
+- **Config draft save** — validate and save `deskmux.config.json` from the desktop app (Tauri IPC; restart required to apply).
 
 ## Requirements
 
