@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "get-api-base-url"
+    "get-api-base-url",
+    "validate-config-draft",
+    "save-config-draft"
   ]
 }

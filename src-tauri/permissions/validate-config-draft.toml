@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "validate-config-draft"
+description = "Allows the dashboard to validate a config draft without writing to disk."
+commands.allow = ["validate_config_draft"]
