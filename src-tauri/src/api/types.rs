@@ -71,3 +71,34 @@ pub struct ErrorResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_error: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryDisplaysResponse {
+    /// Whether native DDC discovery works on this platform (Windows only today). False means
+    /// `displays` is empty by construction — the UI should point users at shell-command setup.
+    pub native_available: bool,
+    pub displays: Vec<DiscoveryDisplaySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryDisplaySummary {
+    pub display_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InputSourceResponse {
+    pub current: u32,
+    pub maximum: u32,
+}
+
+/// Discovery errors carry a stable machine-readable `code` (see docs/NATIVE_DDC_DISCOVERY.md)
+/// alongside the human-readable message, unlike the config-flavored `ErrorResponse`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryErrorResponse {
+    pub error: String,
+    pub code: String,
+}
