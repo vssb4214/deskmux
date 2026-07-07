@@ -1,5 +1,5 @@
 export const CONFIG_FILE_HINT =
-  'Check deskmux.config.json in the DeskMux app directory, fix the issue, and restart DeskMux.';
+  'Use the Set up DeskMux checklist below to create a new configuration, or fix deskmux.config.json and restart DeskMux.';
 
 /**
  * @param {string | undefined | null} configError

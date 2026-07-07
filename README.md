@@ -48,13 +48,18 @@ npm run tauri dev
 
 ## Configure
 
-Copy the example config and edit it for your setup:
+**Recommended — in-app setup (desktop app):**
 
-```bash
-cp deskmux.config.example.json deskmux.config.json
-```
+1. Open DeskMux.
+2. Follow **Set up DeskMux** in the dashboard.
+3. **Detect displays** (Windows native DDC).
+4. **Capture input values** — switch each monitor to the input you want, then read the current value.
+5. **Generate config draft** from the captured readings.
+6. Open **Advanced options**, **Validate**, then **Save** (desktop app only).
+7. **Restart DeskMux** so the new config loads.
+8. **Test a preset** with dry-run first.
 
-Each monitor declares its inputs and the shell command that selects each input. DeskMux doesn't guess DDC values — you supply the command that works for your monitor and backend. See [`docs/CONFIG.md`](docs/CONFIG.md) for the full schema and worked examples for Windows and macOS.
+**Advanced — manual JSON:** copy [`deskmux.config.example.json`](deskmux.config.example.json) to `deskmux.config.json` and edit by hand. See [`docs/CONFIG.md`](docs/CONFIG.md) for the schema and platform examples.
 
 ## Usage
 
@@ -63,8 +68,6 @@ Each monitor declares its inputs and the shell command that selects each input. 
 3. Uncheck **Dry run — preview commands only** when you are ready to switch monitor inputs, then apply a preset.
 4. Results (local, peer, and planning errors) appear in the dashboard; `lastAppliedPreset` updates only after a non-dry-run full success.
 5. **Tray / hotkeys (desktop):** use the system tray menu to show the window or apply a preset. Optional `hotkeys` in config register global shortcuts (real apply, same as unchecking dry-run in the dashboard).
-
-Config is still edited by hand in `deskmux.config.json` — in-app config editing is not implemented yet.
 
 ## Limitations
 

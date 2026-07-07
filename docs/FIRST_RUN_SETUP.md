@@ -1,8 +1,24 @@
-# First-run setup experience — plan
+# First-run setup experience
 
-**Status:** planned (not implemented). Goal: someone new can go from zero to a working `deskmux.config.json` without hand-editing JSON or running a diagnostic build.
+**Status:** guided checklist shipped in the dashboard; full stepper wizard and tray entry still planned.
 
-## Current pain
+Goal: someone new can go from zero to a working `deskmux.config.json` without hand-editing JSON.
+
+## Using the dashboard checklist today
+
+When DeskMux starts without a valid config, open the desktop app and follow **Set up DeskMux**:
+
+1. **Name this computer** — becomes `deviceName` and the matching `devices[]` entry.
+2. **Detect monitors** — uses `GET /native-ddc/displays` on Windows.
+3. **Capture input values** — switch each monitor physically, click **Read current input**, note the value.
+4. **Generate config draft** — builds starter JSON from captured readings.
+5. **Validate and save** — open **Advanced options**, review JSON, then validate/save via desktop IPC.
+6. **Restart DeskMux** — quit and reopen so the new config loads.
+7. **Test a preset** — apply with dry-run first.
+
+Restart is required after save; there is no hot reload.
+
+## Current pain (manual path)
 
 Today a new user must:
 
@@ -79,7 +95,8 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 | Discovery read API | Done — `GET /native-ddc/displays`, `GET /native-ddc/displays/{id}/input-source` (see [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)) |
 | Discovery dashboard panel (read-only) | Done — "Monitor discovery" card |
 | Config draft validate/save (Tauri IPC) | Done — minimal "Config draft" dashboard card; full wizard still planned |
-| Dashboard wizard UI | Not started |
+| Guided setup checklist (dashboard) | Done — status bar + checklist + draft generation from captured readings |
+| Dashboard wizard UI | Not started — tray "Run setup wizard" and dedicated stepper still planned |
 
 ## Config write safety
 
@@ -101,8 +118,8 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 
 1. ~~Discovery HTTP API (read-only)~~ — done, with a read-only dashboard discovery panel
 2. ~~Config draft validate/save via Tauri IPC~~ — done, with a minimal dashboard "Config draft" card
-3. Wizard shell in dashboard (stepper UI, vanilla JS)
-4. Tray entry "Run setup wizard" when config missing
+3. ~~Guided setup checklist in dashboard~~ — done
+4. Wizard shell / tray entry (stepper UI, vanilla JS)
 
 ## Success criteria
 
