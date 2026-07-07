@@ -439,13 +439,7 @@ function generateDraftFromSetup() {
   setupSession = markDraftGenerated(setupSession);
   populateConfigDraftTextarea(result.json);
 
-  renderDraftSummary(els.draftSummaryPanel, {
-    deviceLabel: setupSession.deviceName?.trim() ?? 'this computer',
-    monitorLabels: (setupSession.readings ?? []).map((reading) =>
-      getMonitorNameForDisplay(reading.displayId),
-    ),
-    presetLabel: getEffectivePresetLabel(),
-  });
+  renderDraftSummary(els.draftSummaryPanel, result.summary);
   renderDashboardChrome();
 
   document.getElementById('advanced-details')?.scrollIntoView({

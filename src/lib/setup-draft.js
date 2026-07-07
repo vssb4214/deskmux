@@ -1,21 +1,36 @@
 /** @typedef {import('./setup-session.js').SetupSession} SetupSession */
 
+import {
+  defaultPresetLabel,
+  ensureUniqueIds,
+  makeDeviceId,
+  makeMonitorId,
+  makePresetId,
+} from './setup-names.js';
+import { getEffectiveMonitorName } from './setup-session.js';
+
 /**
- * @param {string} name
- * @returns {string}
+ * @param {SetupSession} session
+ * @returns {{ deviceLabel: string, monitorLabels: string[], presetLabel: string }}
  */
-export function slugifyDeviceId(name) {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'my-pc';
+export function buildDraftSummary(session) {
+  const deviceLabel = session.deviceName?.trim() || 'this computer';
+  const presetLabel = session.presetLabel?.trim() || defaultPresetLabel(deviceLabel);
+
+  const monitorLabels = (session.readings ?? []).map((reading, index) => {
+    const displayIndex =
+      session.displays?.findIndex((display) => display.displayId === reading.displayId) ?? index;
+    const display =
+      displayIndex >= 0 ? session.displays?.[displayIndex] : session.displays?.[index];
+    return getEffectiveMonitorName(display, displayIndex >= 0 ? displayIndex : index);
+  });
+
+  return { deviceLabel, monitorLabels, presetLabel };
 }
 
 /**
  * @param {SetupSession} session
- * @returns {{ ok: true, json: string } | { ok: false, errors: string[] }}
+ * @returns {{ ok: true, json: string, summary: ReturnType<typeof buildDraftSummary> } | { ok: false, errors: string[] }}
  */
 export function buildConfigDraftFromSetupState(session) {
   /** @type {string[]} */
@@ -32,13 +47,18 @@ export function buildConfigDraftFromSetupState(session) {
     return { ok: false, errors };
   }
 
-  const deviceId = slugifyDeviceId(session.deviceName);
   const deviceLabel = session.deviceName.trim();
-  const presetName = `all_${deviceId.replace(/-/g, '_')}`;
+  const deviceId = makeDeviceId(deviceLabel);
+  const presetLabel = session.presetLabel?.trim() || defaultPresetLabel(deviceLabel);
+  const presetId = makePresetId(presetLabel);
+  const summary = buildDraftSummary(session);
+
+  const monitorLabels = summary.monitorLabels;
+  const monitorIds = ensureUniqueIds(monitorLabels, (label, index) => makeMonitorId(label, index));
 
   const monitors = session.readings.map((reading, index) => ({
-    id: `monitor${index + 1}`,
-    label: reading.label || `Monitor ${index + 1}`,
+    id: monitorIds[index],
+    label: monitorLabels[index],
     order: index,
     nativeDdc: { displayId: reading.displayId },
     inputs: {
@@ -63,12 +83,16 @@ export function buildConfigDraftFromSetupState(session) {
     devices: [{ id: deviceId, label: deviceLabel }],
     monitors,
     presets: {
-      [presetName]: {
-        label: `All ${deviceLabel}`,
+      [presetId]: {
+        label: presetLabel,
         layout,
       },
     },
   };
 
-  return { ok: true, json: JSON.stringify(config, null, 2) };
+  return {
+    ok: true,
+    json: JSON.stringify(config, null, 2),
+    summary,
+  };
 }
