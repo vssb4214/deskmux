@@ -431,8 +431,13 @@ export function renderEvents(container, events) {
  * @param {HTMLElement} container
  * @param {DiscoveryDisplaysResponse} data
  * @param {(displayId: string, readingEl: HTMLElement, buttonEl: HTMLButtonElement) => void} onReadInput
+ * @param {{
+ *   getMonitorName?: (displayId: string, index: number) => string,
+ *   onMonitorNameChange?: (displayId: string, name: string) => void,
+ *   previewMonitorId?: (displayId: string, index: number, name: string) => string,
+ * } | undefined} [naming]
  */
-export function renderDiscoveryPanel(container, data, onReadInput) {
+export function renderDiscoveryPanel(container, data, onReadInput, naming) {
   container.replaceChildren();
 
   if (!data.nativeAvailable) {
@@ -486,6 +491,36 @@ export function renderDiscoveryPanel(container, data, onReadInput) {
     });
 
     item.appendChild(header);
+
+    if (naming?.onMonitorNameChange) {
+      const nameField = document.createElement('label');
+      nameField.className = 'field setup-name-field';
+
+      const nameLabel = document.createElement('span');
+      nameLabel.textContent = 'Monitor name';
+
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'text-input';
+      nameInput.placeholder = `e.g. ${index === 0 ? 'Center monitor' : 'Desk monitor'}`;
+      nameInput.value = naming.getMonitorName?.(display.displayId, index) ?? '';
+      nameInput.addEventListener('input', () => {
+        naming.onMonitorNameChange?.(display.displayId, nameInput.value);
+        if (naming.previewMonitorId && idPreview) {
+          idPreview.textContent = `Config id: ${naming.previewMonitorId(display.displayId, index, nameInput.value)}`;
+        }
+      });
+
+      const idPreview = document.createElement('p');
+      idPreview.className = 'meta-line muted setup-id-preview';
+      if (naming.previewMonitorId) {
+        idPreview.textContent = `Config id: ${naming.previewMonitorId(display.displayId, index, nameInput.value)}`;
+      }
+
+      nameField.append(nameLabel, nameInput);
+      item.append(nameField, idPreview);
+    }
+
     item.appendChild(reading);
     list.appendChild(item);
   });
