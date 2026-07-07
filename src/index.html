@@ -15,50 +15,27 @@
       </header>
 
       <div id="bootstrap-banner" class="banner banner-warning" hidden></div>
-      <div id="status-banner" class="banner banner-info" hidden></div>
       <p id="loading" class="loading">Starting…</p>
 
-      <section class="card">
+      <section id="setup-status-bar" class="setup-status-bar card" aria-live="polite">
+        <div class="setup-status-bar-main">
+          <span id="setup-status-badge" class="badge setup-status-badge">Starting…</span>
+          <p id="setup-status-message" class="setup-status-message"></p>
+        </div>
+        <button id="setup-primary-cta" type="button" class="btn btn-primary" hidden>
+          Start setup
+        </button>
+      </section>
+
+      <div id="status-banner" class="banner banner-info" hidden></div>
+
+      <section id="primary-action-card" class="card">
         <div class="card-header">
-          <h2>Status</h2>
+          <div id="primary-action-heading"></div>
           <button id="refresh-btn" type="button" class="btn btn-secondary">Refresh</button>
         </div>
-        <div id="status-panel"></div>
-      </section>
-
-      <section class="card">
-        <h2>Monitors</h2>
-        <div id="monitor-list"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-header">
-          <h2>Monitor discovery</h2>
-          <button id="detect-btn" type="button" class="btn btn-secondary">
-            Detect displays
-          </button>
-        </div>
-        <div id="discovery-panel">
-          <p class="meta-line muted">
-            Click “Detect displays” to find monitors DeskMux can control natively, then read
-            each input's value for your config.
-          </p>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Config draft</h2>
-        <div id="config-draft-panel"></div>
-      </section>
-
-      <section class="card">
-        <h2>Recent events</h2>
-        <div id="events-panel"></div>
-      </section>
-
-      <section class="card">
-        <h2>Apply preset</h2>
-        <div class="apply-controls">
+        <div id="setup-start-section" hidden></div>
+        <div id="apply-section" class="apply-controls" hidden>
           <label class="field">
             <span>Preset</span>
             <select id="preset-select" disabled></select>
@@ -74,9 +51,101 @@
             Apply preset
           </button>
         </div>
+        <div id="apply-panel" class="apply-panel" hidden></div>
       </section>
 
-      <section id="apply-panel" class="card apply-panel" hidden></section>
+      <section id="setup-checklist-card" class="card">
+        <h2>Set up DeskMux</h2>
+        <div id="setup-checklist"></div>
+
+        <div id="setup-step-panels" class="setup-step-panels">
+          <div id="setup-step-name" class="setup-step-panel">
+            <h3>Step 1 — Name this computer</h3>
+            <label class="field">
+              <span>Computer name</span>
+              <input
+                id="device-name-input"
+                type="text"
+                class="text-input"
+                placeholder="e.g. Windows PC"
+                autocomplete="off"
+              />
+            </label>
+          </div>
+
+          <div id="setup-step-detect" class="setup-step-panel">
+            <h3>Step 2 — Detect monitors</h3>
+            <p class="helper">
+              Find displays DeskMux can control on this machine. On Windows this uses native
+              DDC; other platforms need shell commands in Advanced JSON.
+            </p>
+            <button id="detect-btn" type="button" class="btn btn-secondary">Detect displays</button>
+            <div id="discovery-panel" class="setup-discovery-panel">
+              <p class="meta-line muted">
+                Click Detect displays to list monitors, then capture each input value in the
+                next step.
+              </p>
+            </div>
+          </div>
+
+          <div id="setup-step-capture" class="setup-step-panel">
+            <h3>Step 3 — Capture input values</h3>
+            <p class="helper setup-capture-instruction">
+              Switch the monitor to the input you want to capture, then click Read current
+              input for that display.
+            </p>
+            <div id="captured-readings-panel"></div>
+          </div>
+
+          <div id="setup-step-generate" class="setup-step-panel">
+            <h3>Step 4 — Generate config draft</h3>
+            <p class="helper">
+              Build a starter config from the computer name and captured input values.
+            </p>
+            <button id="generate-draft-btn" type="button" class="btn btn-secondary">
+              Generate config draft
+            </button>
+            <div id="generate-draft-errors" class="setup-inline-errors" hidden></div>
+            <div id="draft-summary-panel" class="setup-draft-summary" hidden></div>
+          </div>
+
+          <div id="setup-step-save" class="setup-step-panel">
+            <h3>Step 5 — Validate and save</h3>
+            <p class="helper">
+              Open Advanced options below to review JSON, then validate and save from the
+              desktop app.
+            </p>
+          </div>
+
+          <div id="setup-step-restart" class="setup-step-panel">
+            <h3>Step 6 — Restart DeskMux</h3>
+            <p class="helper">
+              After saving, quit DeskMux completely and open it again. Your new configuration
+              loads on startup.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <details id="events-details" class="card details-card">
+        <summary>Recent activity</summary>
+        <div id="events-panel"></div>
+      </details>
+
+      <details id="advanced-details" class="card details-card">
+        <summary>Advanced options</summary>
+
+        <section class="advanced-section">
+          <h3>Advanced: edit generated config JSON</h3>
+          <div id="config-draft-panel"></div>
+        </section>
+
+        <section class="advanced-section">
+          <h3>Configured monitors</h3>
+          <div id="status-panel"></div>
+          <div id="monitor-list"></div>
+        </section>
+      </details>
     </main>
 
     <script type="module" src="main.js"></script>

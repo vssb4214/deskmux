@@ -104,17 +104,21 @@ export function renderConfigErrorBanner(container, configError) {
  * @param {StatusResponse} status
  */
 export function renderStatus(container, status) {
-  container.innerHTML = '';
+  container.replaceChildren();
 
   const device = document.createElement('p');
   device.className = 'meta-line';
-  device.innerHTML = `<strong>Device</strong> ${escapeHtml(status.deviceName)}`;
+  const deviceLabel = document.createElement('strong');
+  deviceLabel.textContent = 'Device';
+  device.append(deviceLabel, document.createTextNode(` ${status.deviceName}`));
   container.appendChild(device);
 
   const last = document.createElement('p');
   last.className = 'meta-line';
+  const lastLabel = document.createElement('strong');
+  lastLabel.textContent = 'Last applied preset';
   const lastText = status.lastAppliedPreset ?? 'None';
-  last.innerHTML = `<strong>Last applied preset</strong> ${escapeHtml(lastText)}`;
+  last.append(lastLabel, document.createTextNode(` ${lastText}`));
   container.appendChild(last);
 }
 
@@ -490,7 +494,7 @@ export function renderDiscoveryPanel(container, data, onReadInput) {
 }
 
 /**
- * Temporary first-run plumbing — replaced by the guided setup wizard (phase 3).
+ * Temporary first-run plumbing — guided setup checklist is the primary path.
  *
  * @param {HTMLElement} container
  */
@@ -506,14 +510,16 @@ export function renderConfigDraftDesktopOnly(container) {
 /**
  * @param {HTMLElement} container
  * @param {string} draft
+ * @param {{ advanced?: boolean }} [options]
  */
-export function renderConfigDraftEditor(container, draft) {
+export function renderConfigDraftEditor(container, draft, options = {}) {
   container.replaceChildren();
 
   const helper = document.createElement('p');
   helper.className = 'helper';
-  helper.textContent =
-    'Edit draft JSON, validate, then save. Saving writes deskmux.config.json in the app directory.';
+  helper.textContent = options.advanced
+    ? 'Review or edit the generated JSON, validate, then save. Saving writes deskmux.config.json in the app directory.'
+    : 'Edit draft JSON, validate, then save. Saving writes deskmux.config.json in the app directory.';
 
   const field = document.createElement('label');
   field.className = 'field config-draft-field';
@@ -592,15 +598,4 @@ export function renderConfigDraftSuccess(container, message = CONFIG_DRAFT_SUCCE
   text.className = 'config-draft-success';
   text.textContent = message;
   container.appendChild(text);
-}
-
-/**
- * @param {string} value
- */
-function escapeHtml(value) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
 }
