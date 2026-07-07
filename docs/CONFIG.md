@@ -154,6 +154,8 @@ DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`
 - `GET /health` — liveness; works even when config failed to load. When config is missing or invalid, the response includes `configError` with a human-readable load/validation message (no stack traces or shell commands).
 - `GET /status` — device name, presets, monitors (no shell commands). Returns **503** with `{ "error": "config not loaded", "configError": "..." }` when config did not load.
 - `GET /events` — recent activity (see below). Always returns 200, even when config failed to load.
+- `GET /native-ddc/displays` — native DDC display discovery (see below). Works without a loaded config.
+- `GET /native-ddc/displays/{displayId}/input-source` — read the current VCP `0x60` input-source value (see below). Works without a loaded config.
 - `POST /apply-preset` — apply a named preset (see below). Returns the same **503** shape when config did not load.
 
 ### `GET /health`
@@ -185,6 +187,39 @@ Example when config failed:
 | `events` | Up to 50 most recent events, newest first |
 
 Each event: `{ timestampMs, kind, message, preset?, source?, monitorId? }`. `kind` is `"info" \| "success" \| "error"`; `source` (when present) is `"api" \| "tray" \| "hotkey"` — which trigger caused the preset apply. Recorded on config load/failure, preset apply start/finish, and per-monitor native-DDC results. Messages never include shell commands or raw VCP values — only preset/monitor names and outcome summaries.
+
+### `GET /native-ddc/displays`
+
+Read-only monitor discovery for filling in `nativeDdc` config values in-app instead of reading
+startup logs (see [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)). Works with no config
+loaded — first run is when discovery matters most.
+
+**Response** (200):
+
+| Field             | Description |
+|-------------------|-------------|
+| `nativeAvailable` | Whether native DDC works on this platform (Windows only today). `false` means `displays` is empty; configure shell commands instead. |
+| `displays`        | `[{ "displayId": "..." }]` — copy into `monitors[].nativeDdc.displayId` |
+
+### `GET /native-ddc/displays/{displayId}/input-source`
+
+Reads the current VCP `0x60` input-source value for one display (percent-encode the
+`displayId`). To identify each input's value: switch the monitor to an input physically, read,
+note the value, repeat. The reply's `maximum` is a single monitor-reported number — not a list
+of supported values.
+
+Reads retry once internally with a refreshed enumeration (some monitors fail transiently after
+hotplug). Discovery never writes to the monitor.
+
+**Response** (200): `{ "current": 4626, "maximum": 4626 }`
+
+**Errors** carry a stable `code` alongside the message:
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| 404 | `displayNotFound` | `displayId` not in the current enumeration |
+| 500 | `vcpReadFailed` / `enumerationFailed` | DDC read failed even after refresh / enumeration failed |
+| 501 | `nativeUnavailable` | Not a Windows build |
 
 ### `POST /apply-preset`
 

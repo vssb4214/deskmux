@@ -37,10 +37,10 @@ Phase 2 replaces the *requirement* for external monitor tools on supported displ
   - other DDC/CI VCP controls the display actually exposes
   - Not every control is available on every monitor; DeskMux will surface what the hardware supports.
 - [ ] **Native DDC discovery and resilience** (follow-ups from real-hardware validation):
-  - In-app read of the current VCP `0x60` input-source value per display.
-  - Surface supported input-source values where the monitor exposes them via DDC.
-  - Retry/refresh strategy for intermittent `GetVCPFeatureAndVCPFeatureReply` failures — possible stale physical-monitor handles after hotplug.
-  - Onboarding flow so users can discover `displayId` and `inputSourceValue` without a separate diagnostic session.
+  - ~~In-app read of the current VCP `0x60` input-source value per display.~~ Done — `GET /native-ddc/displays[/{id}/input-source]` + dashboard "Monitor discovery" card.
+  - Surface supported input-source values where the monitor exposes them via DDC (capabilities-string parsing; the VCP reply's `maximum` is a single number, not a list).
+  - ~~Retry/refresh strategy for intermittent `GetVCPFeatureAndVCPFeatureReply` failures — possible stale physical-monitor handles after hotplug.~~ Done — discovery reads retry once with refreshed enumeration.
+  - Onboarding flow so users can discover `displayId` and `inputSourceValue` without a separate diagnostic session (see [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md)).
   - Technical design: [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)
 - [ ] Peer auto-discovery on the LAN (mDNS/similar), so peers don't have to be hand-configured with IPs
 

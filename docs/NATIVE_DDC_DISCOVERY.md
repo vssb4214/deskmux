@@ -1,6 +1,11 @@
 # Native DDC input discovery — technical design
 
-**Status:** planned (not implemented). This document captures what real-hardware validation proved and how DeskMux should expose discovery without a separate diagnostic session.
+**Status:** read path implemented — display enumeration and VCP 0x60 reads are live via
+`GET /native-ddc/displays` and `GET /native-ddc/displays/{displayId}/input-source`, surfaced in
+the dashboard's "Monitor discovery" card, with the retry-once refresh policy below.
+Probe-write, capabilities-string parsing, and the onboarding wizard are still pending. This
+document captures what real-hardware validation proved and how DeskMux exposes discovery
+without a separate diagnostic session.
 
 ## Problem
 
@@ -112,11 +117,11 @@ Discovery API feeds a first-run wizard (see `docs/FIRST_RUN_SETUP.md`):
 
 ## Implementation order
 
-1. `get_vcp_feature` on trait + Windows impl + retry refresh.
-2. `GET /native-ddc/displays` and `GET .../input-source`.
-3. Dashboard “Discovery” panel (read-only).
+1. ~~`get_vcp_feature` on trait + Windows impl + retry refresh.~~ Done.
+2. ~~`GET /native-ddc/displays` and `GET .../input-source`.~~ Done.
+3. ~~Dashboard “Discovery” panel (read-only).~~ Done ("Monitor discovery" card).
 4. Probe-write behind confirmation button.
-5. First-run wizard consumes discovery API.
+5. First-run wizard consumes discovery API (see [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md)).
 
 ## Related docs
 
