@@ -64,7 +64,7 @@ Each monitor declares its inputs and the shell command that selects each input. 
 4. Results (local, peer, and planning errors) appear in the dashboard; `lastAppliedPreset` updates only after a non-dry-run full success.
 5. **Tray / hotkeys (desktop):** use the system tray menu to show the window or apply a preset. Optional `hotkeys` in config register global shortcuts (real apply, same as unchecking dry-run in the dashboard).
 
-Config is still edited by hand in `deskmux.config.json` — in-app config editing is not implemented yet.
+Use the in-app **Set up DeskMux** checklist to detect monitors, capture input values, generate a config draft, and save from the desktop app. Restart DeskMux after saving. You can still edit `deskmux.config.json` by hand — see [`docs/CONFIG.md`](docs/CONFIG.md).
 
 ## Limitations
 
