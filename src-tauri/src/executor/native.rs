@@ -26,6 +26,12 @@ pub(super) trait NativeDdcController {
     /// Enumerates currently connected displays this controller can address.
     fn list_displays(&self) -> io::Result<Vec<NativeDisplay>>;
     /// Writes `value` to VCP feature `vcp_code` on the display identified by `display_id`.
+    /// Only called by `NativeDdcBackend` (Windows-gated) — genuinely unused on other platforms
+    /// today, since `executor::discovery` is read-only. Not `#[cfg(target_os = "windows")]` on
+    /// the trait itself so the interface stays uniform for every implementor (including
+    /// discovery's cross-platform test doubles); the allow documents *why* it's silenced rather
+    /// than hiding an actual bug.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     fn set_vcp_feature(&self, display_id: &str, vcp_code: u8, value: u16) -> io::Result<()>;
     /// Reads VCP feature `vcp_code` from the display identified by `display_id`. A single
     /// attempt — retry policy lives in `executor::discovery`, not here.
