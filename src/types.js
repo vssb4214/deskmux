@@ -62,6 +62,12 @@
  *   monitorId?: string
  * }} DeskMuxEvent
  * @typedef {{ events: DeskMuxEvent[] }} EventsResponse
+ * @typedef {{ displayId: string }} DiscoveryDisplaySummary
+ * @typedef {{
+ *   nativeAvailable: boolean,
+ *   displays: DiscoveryDisplaySummary[]
+ * }} DiscoveryDisplaysResponse
+ * @typedef {{ current: number, maximum: number }} InputSourceResponse
  * @typedef {'dry-run' | 'planning-failed' | 'success' | 'partial' | 'failed'} ApplySummaryClass
  */
 
