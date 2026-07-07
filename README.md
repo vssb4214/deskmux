@@ -52,12 +52,13 @@ npm run tauri dev
 
 1. Open DeskMux.
 2. Follow **Set up DeskMux** in the dashboard.
-3. **Detect displays** (Windows native DDC).
-4. **Capture input values** — switch each monitor to the input you want, then read the current value.
-5. **Generate config draft** from the captured readings.
-6. Open **Advanced options**, **Validate**, then **Save** (desktop app only).
-7. **Restart DeskMux** so the new config loads.
-8. **Test a preset** with dry-run first.
+3. **Name this computer** — pick a label you will recognize (for example “Gaming PC”).
+4. **Detect displays** (Windows native DDC) and **name each monitor** (for example “Center 1440p”).
+5. **Capture input values** — switch each monitor to the input you want, read the current value, and label the capture if helpful.
+6. **Name your preset** (defaults to “All {computer name}”), then **Generate config draft**.
+7. Review the friendly draft summary, then open **Advanced options**, **Validate**, and **Save** (desktop app only).
+8. **Restart DeskMux** so the new config loads.
+9. **Test a preset** with dry-run first.
 
 **Advanced — manual JSON:** copy [`deskmux.config.example.json`](deskmux.config.example.json) to `deskmux.config.json` and edit by hand. See [`docs/CONFIG.md`](docs/CONFIG.md) for the schema and platform examples.
 
