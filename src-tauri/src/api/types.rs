@@ -94,12 +94,6 @@ pub struct InputSourceResponse {
     pub maximum: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProbeInputRequest {
-    pub value: u16,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeInputResponse {

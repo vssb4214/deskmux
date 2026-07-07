@@ -520,6 +520,26 @@ summary:focus-visible {
   margin-top: 0.75rem;
 }
 
+.probe-test-row {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.probe-test-status {
+  margin-top: 0.5rem;
+}
+
+.probe-test-status p {
+  margin: 0;
+}
+
+.probe-test-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 .setup-draft-summary-list {
   margin: 0.5rem 0 0;
   padding-left: 1.25rem;
@@ -616,6 +636,10 @@ summary:focus-visible {
 
   .captured-reading-card {
     background: #242424;
+    border-color: #444;
+  }
+
+  .probe-test-row {
     border-color: #444;
   }
 

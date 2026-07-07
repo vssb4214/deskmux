@@ -4,6 +4,14 @@ All notable changes to DeskMux are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Security
+
+- **Native DDC probe (test-switch) write moved from HTTP to a Tauri IPC command.** `POST /native-ddc/displays/{id}/probe-input` shipped in 0.2.0 as a plain endpoint on the loopback API — any local process able to reach the port could trigger a monitor write. It's removed; the only way to test-switch an input now is the `probe_input` Tauri command, invokable solely from the bundled desktop webview, matching the design already used for config save.
+- **Probe writes are now gated to previously observed values**, not bounded only by the `u16` type. Real-hardware readings on this project's own validated monitors showed the VCP reply's `maximum` field mirrors `current` rather than reporting a stable ceiling, making a numeric bound close to meaningless — a probe can now only replay a value a read has already returned as that exact display's current input this session, enforced server-side regardless of what calls the command.
+- **Added revert-on-timeout to the setup checklist's "Test this input" control.** A test switch auto-reverts to the pre-probe value after a short countdown unless explicitly confirmed, so a bad or unexpected switch can't strand a display with no signal and no way back short of the monitor's own physical buttons.
+
 ## [0.1.0] - 2026-07-05
 
 First tagged release. DeskMux is config-driven monitor preset switching for multi-machine, multi-monitor desks — this version covers the full Phase 1 foundation plus the first Phase 2 milestone (native Windows DDC).

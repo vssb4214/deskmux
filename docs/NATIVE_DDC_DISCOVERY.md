@@ -1,12 +1,15 @@
 # Native DDC input discovery — technical design
 
-**Status:** read path and setup probe-write are implemented — display enumeration, VCP 0x60 reads,
-and setup-time test writes are live via
-`GET /native-ddc/displays` and `GET /native-ddc/displays/{displayId}/input-source`, surfaced in
-the dashboard's "Monitor discovery" card, plus `POST /native-ddc/displays/{displayId}/probe-input`.
-Capabilities-string parsing and the onboarding wizard are still pending. This
-document captures what real-hardware validation proved and how DeskMux exposes discovery
-without a separate diagnostic session.
+**Status:** read path and setup probe-write are implemented — display enumeration and VCP 0x60
+reads are live via `GET /native-ddc/displays` and `GET /native-ddc/displays/{displayId}/input-source`,
+surfaced in the dashboard's "Monitor discovery" card and the guided setup checklist's "Test this
+input" control. The probe (test-switch) write is **not** an HTTP endpoint — it's the Tauri
+`probe_input` IPC command, invokable only from the bundled webview, and it only accepts a value
+that a read has already returned as that exact display's current input this session (enforced
+server-side, not just by the UI). See "Security and safety" below for why. Capabilities-string
+parsing and the full onboarding wizard are still pending. This document captures what
+real-hardware validation proved and how DeskMux exposes discovery without a separate diagnostic
+session.
 
 ## Problem
 
@@ -65,19 +68,21 @@ New module `executor::discovery` (or `api::discovery`) with pure functions:
 |----------|-------|--------|
 | `list_displays()` | — | `Vec<{ displayId, label? }>` (wraps existing enumeration) |
 | `read_input_source(display_id)` | display ID | `{ current, maximum }` |
-| `probe_input_write(display_id, value)` | display ID + candidate value | `{ accepted: bool, rawReturnCode }` — **manual / explicit only**, not called from preset apply |
+| `probe_input(display_id, value)` | display ID + a value previously returned by a read | `{ accepted: bool, current: Option<u32> }` — never called from preset apply |
 
-`probe_input_write` is for onboarding “test this input” buttons, gated behind user confirmation and dry-run style UX — never silent.
+`probe_input` is for the setup checklist's "Test this input" control, gated by the observed-value
+check below and by the dashboard's revert-on-timeout UX — never silent, never a value the user
+just typed.
 
-### 3. HTTP API
+### 3. HTTP API (reads only)
 
 ```
 GET /native-ddc/displays
 GET /native-ddc/displays/{displayId}/input-source
-POST /native-ddc/displays/{displayId}/probe-input   { "value": 4626 }  // explicit test only
 ```
 
-Responses are JSON, camelCase, no shell commands, no secrets.
+Responses are JSON, camelCase, no shell commands, no secrets. **The probe write is deliberately
+not here** — see "Security and safety."
 
 ### 4. Error taxonomy
 
@@ -100,10 +105,30 @@ Discovery API feeds a first-run wizard (see `docs/FIRST_RUN_SETUP.md`):
 
 ## Security and safety
 
-- Discovery endpoints bind to loopback by default (same as existing API).
+- Discovery **read** endpoints bind to loopback by default (same as existing API) — any local
+  process can enumerate displays and read the current input, which is non-destructive.
+- The probe **write** is IPC-only (`probe_input` Tauri command), not HTTP. Any local process can
+  reach the loopback API, but only the bundled webview can invoke a Tauri command — the same
+  reasoning already applied to config-save. Testing a probe also only makes sense when you're
+  physically watching the monitor, which the IPC restriction matches correctly rather than
+  incidentally.
+- **Value bounding is observed-values-only, not a numeric range.** Real hardware readings
+  (`current=4626, maximum=4626` and `current=3, maximum=3` on this project's own validated
+  monitors) show `maximum` mirrors `current` rather than reporting a stable ceiling — a
+  `value ≤ maximum` check would be close to meaningless on this hardware. Instead, `probe_input`
+  only accepts a `value` that a read has already returned as the exact `current` value for that
+  `display_id` this session (`AppState.observed_input_values`, shared between the HTTP read
+  handler and the IPC probe command). This is enforced inside the command itself, not just by
+  what the UI offers, so it can't be bypassed by invoking the command directly with an untested
+  value. There is deliberately no escape hatch for "a value I already know from documentation" —
+  physically switching the monitor to it once and reading makes it observed, which is the normal
+  flow one step earlier.
 - Never log or return shell `command` strings in discovery responses.
-- Probe-write requires explicit user action; rate-limit in UI (one probe per button click).
-- No automatic probe on startup.
+- The dashboard's "Test this input" control auto-reverts to the pre-probe value after a short
+  countdown unless the user confirms the change is correct — see `src/lib/probe.js`. This is
+  what actually prevents a stranded no-signal display; the exposure and value-bounding rules
+  above only make the write itself safer, not recoverable on their own.
+- No automatic probe on startup, and probe is never called from preset apply.
 
 ## Testing strategy
 
@@ -111,7 +136,8 @@ Discovery API feeds a first-run wizard (see `docs/FIRST_RUN_SETUP.md`):
 |-------|----------|
 | Unit | Mock `NativeDdcController` returns canned `(current, max)` |
 | Resolver | Unchanged — still maps config `inputSourceValue: u16` → `BackendAction` |
-| Integration | HTTP handler tests with mock discovery seam |
+| Integration | HTTP handler tests (reads) and direct `probe_input_gated` tests (probe) with mock discovery seam |
+| Frontend | `startProbeRevertTimer`'s confirm/revert/timeout state machine is unit-tested with a fake scheduler — no real timers |
 | Hardware | Manual checklist on Windows with at least one DDC-capable external panel |
 
 ## Implementation order
@@ -119,7 +145,7 @@ Discovery API feeds a first-run wizard (see `docs/FIRST_RUN_SETUP.md`):
 1. ~~`get_vcp_feature` on trait + Windows impl + retry refresh.~~ Done.
 2. ~~`GET /native-ddc/displays` and `GET .../input-source`.~~ Done.
 3. ~~Dashboard “Discovery” panel (read-only).~~ Done ("Monitor discovery" card).
-4. ~~Probe-write endpoint for explicit setup-time test switches.~~ Done — `POST /native-ddc/displays/{id}/probe-input`.
+4. ~~Probe-write for explicit setup-time test switches.~~ Done — Tauri `probe_input` IPC command, observed-values-gated, with revert-on-timeout in the setup checklist.
 5. First-run wizard consumes discovery API (see [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md)).
 
 ## Related docs

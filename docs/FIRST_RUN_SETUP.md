@@ -66,8 +66,9 @@ Per monitor × device pair where native DDC is desired:
 
 Optional setup-time test switch (no saved config required):
 
-- `POST /native-ddc/displays/{displayId}/probe-input` with `{ "value": <u16> }`
-- Performs one explicit native DDC VCP `0x60` write attempt.
+- Tauri IPC `invoke('probe_input', { displayId, value })` — not HTTP; only invokable from the desktop app.
+- Only accepts a `value` a read has already returned as this display's current input this session (enforced server-side).
+- Performs one explicit native DDC VCP `0x60` write attempt; auto-reverts after a short countdown unless confirmed.
 - Response reports write acceptance; optional read-back may include `current`.
 
 For monitors without native DDC support, fall back to:
@@ -102,10 +103,10 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 | Native DDC apply (u16) | Done |
 | Event history API | Done |
 | Discovery read API | Done — `GET /native-ddc/displays`, `GET /native-ddc/displays/{id}/input-source` (see [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)) |
-| Discovery probe-write API | Done — `POST /native-ddc/displays/{id}/probe-input` (setup-time VCP `0x60` test switch; one write attempt per request) |
+| Discovery probe-write (Tauri IPC) | Done — `probe_input` command, observed-values-gated (never a typed/guessed value), one write attempt per call |
 | Discovery dashboard panel (read-only) | Done — "Monitor discovery" card |
 | Config draft validate/save (Tauri IPC) | Done — minimal "Config draft" dashboard card; full wizard still planned |
-| Guided setup checklist (dashboard) | Done — status bar + checklist + draft generation from captured readings |
+| Guided setup checklist (dashboard) | Done — status bar + checklist + draft generation from captured readings; "Test this input" with revert-on-timeout |
 | Dashboard wizard UI | Not started — tray "Run setup wizard" and dedicated stepper still planned |
 
 ## Config write safety
@@ -113,7 +114,7 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 - Atomic write: `deskmux.config.json.tmp` → rename to `deskmux.config.json`.
 - Validate before save; show errors inline in the dashboard card.
 - If a config file already exists, copy to `deskmux.config.json.bak` before overwrite (abort if backup fails).
-- Desktop-only Tauri IPC (`validate_config_draft`, `save_config_draft`) — no HTTP validate or write endpoints.
+- Desktop-only Tauri IPC (`validate_config_draft`, `save_config_draft`) — no HTTP validate or write endpoints. Same shape for the native-DDC probe write (`probe_input`), which additionally only accepts previously-observed values.
 - Restart DeskMux after save; no hot-reload in the current implementation.
 - Do not commit generated config to git.
 
@@ -126,7 +127,7 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 
 ## Suggested implementation order
 
-1. ~~Discovery HTTP API (read + probe)~~ — done (`GET /native-ddc/displays`, `GET .../input-source`, `POST .../probe-input`)
+1. ~~Discovery HTTP API (reads) + probe-write (Tauri IPC)~~ — done (`GET /native-ddc/displays`, `GET .../input-source`, `probe_input` IPC command)
 2. ~~Config draft validate/save via Tauri IPC~~ — done, with a minimal dashboard "Config draft" card
 3. ~~Guided setup checklist in dashboard~~ — done
 4. Wizard shell / tray entry (stepper UI, vanilla JS)
