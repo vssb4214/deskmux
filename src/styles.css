@@ -343,6 +343,58 @@ body {
   margin: 0.35rem 0 0;
 }
 
+.config-draft-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.config-draft-textarea {
+  width: 100%;
+  min-height: 12rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: inherit;
+  resize: vertical;
+}
+
+.config-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.config-draft-feedback {
+  margin-top: 0.75rem;
+}
+
+.config-draft-feedback-error {
+  color: #991b1b;
+}
+
+.config-draft-feedback-success {
+  color: #166534;
+}
+
+.config-draft-feedback-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.config-draft-error-list {
+  margin: 0;
+}
+
+.config-draft-success {
+  margin: 0;
+  font-weight: 600;
+}
+
 .btn-small {
   padding: 0.35rem 0.7rem;
   font-size: 0.85rem;

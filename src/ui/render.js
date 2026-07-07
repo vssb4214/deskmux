@@ -24,6 +24,10 @@ import {
   summaryBannerText,
 } from '../lib/summary.js';
 import { CONFIG_FILE_HINT } from '../lib/config-error.js';
+import {
+  CONFIG_DRAFT_DESKTOP_ONLY,
+  CONFIG_DRAFT_SUCCESS_MESSAGE,
+} from '../lib/config-draft.js';
 
 /**
  * @param {MonitorOutcome} outcome
@@ -483,6 +487,111 @@ export function renderDiscoveryPanel(container, data, onReadInput) {
   });
 
   container.appendChild(list);
+}
+
+/**
+ * Temporary first-run plumbing — replaced by the guided setup wizard (phase 3).
+ *
+ * @param {HTMLElement} container
+ */
+export function renderConfigDraftDesktopOnly(container) {
+  container.replaceChildren();
+
+  const message = document.createElement('p');
+  message.className = 'meta-line muted';
+  message.textContent = CONFIG_DRAFT_DESKTOP_ONLY;
+  container.appendChild(message);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string} draft
+ */
+export function renderConfigDraftEditor(container, draft) {
+  container.replaceChildren();
+
+  const helper = document.createElement('p');
+  helper.className = 'helper';
+  helper.textContent =
+    'Edit draft JSON, validate, then save. Saving writes deskmux.config.json in the app directory.';
+
+  const field = document.createElement('label');
+  field.className = 'field config-draft-field';
+  const label = document.createElement('span');
+  label.textContent = 'Draft config JSON';
+  const textarea = document.createElement('textarea');
+  textarea.id = 'config-draft-textarea';
+  textarea.className = 'config-draft-textarea';
+  textarea.rows = 14;
+  textarea.spellcheck = false;
+  textarea.value = draft;
+  field.append(label, textarea);
+
+  const actions = document.createElement('div');
+  actions.className = 'config-draft-actions';
+
+  const validateBtn = document.createElement('button');
+  validateBtn.type = 'button';
+  validateBtn.id = 'config-draft-validate-btn';
+  validateBtn.className = 'btn btn-secondary';
+  validateBtn.textContent = 'Validate';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.id = 'config-draft-save-btn';
+  saveBtn.className = 'btn btn-primary';
+  saveBtn.textContent = 'Save';
+
+  actions.append(validateBtn, saveBtn);
+
+  const feedback = document.createElement('div');
+  feedback.id = 'config-draft-feedback';
+  feedback.hidden = true;
+
+  container.append(helper, field, actions, feedback);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string[]} messages
+ */
+export function renderConfigDraftErrorList(container, messages) {
+  container.hidden = messages.length === 0;
+  container.replaceChildren();
+  if (messages.length === 0) {
+    return;
+  }
+
+  container.className = 'config-draft-feedback config-draft-feedback-error';
+
+  const title = document.createElement('p');
+  title.className = 'config-draft-feedback-title';
+  title.textContent = 'Fix these issues before saving:';
+
+  const list = document.createElement('ul');
+  list.className = 'item-list config-draft-error-list';
+  for (const message of messages) {
+    const item = document.createElement('li');
+    item.textContent = message;
+    list.appendChild(item);
+  }
+
+  container.append(title, list);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string} [message]
+ */
+export function renderConfigDraftSuccess(container, message = CONFIG_DRAFT_SUCCESS_MESSAGE) {
+  container.hidden = false;
+  container.className = 'config-draft-feedback config-draft-feedback-success';
+  container.replaceChildren();
+
+  const text = document.createElement('p');
+  text.className = 'config-draft-success';
+  text.textContent = message;
+  container.appendChild(text);
 }
 
 /**
