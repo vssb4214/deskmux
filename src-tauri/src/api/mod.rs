@@ -40,10 +40,9 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/native-ddc/displays/{display_id}/input-source",
             get(discovery::read_input_source_handler),
         )
-        .route(
-            "/native-ddc/displays/{display_id}/probe-input",
-            post(discovery::probe_input_handler),
-        )
+        // Probe (test-switch) writes are intentionally NOT exposed over HTTP — see
+        // api/discovery.rs's module comment. Reachable only via the Tauri `probe_input`
+        // command (commands.rs).
         .layer(cors::dashboard_cors_layer())
         .with_state(state)
 }
@@ -196,11 +195,12 @@ mod tests {
         }
     }
 
+    fn state_with_discovery(mock: MockDiscovery) -> Arc<AppState> {
+        Arc::new(AppState::with_discovery(Ok(test_config()), Box::new(mock)))
+    }
+
     fn app_with_discovery(mock: MockDiscovery) -> Router {
-        router(Arc::new(AppState::with_discovery(
-            Ok(test_config()),
-            Box::new(mock),
-        )))
+        router(state_with_discovery(mock))
     }
 
     const READING_4626: InputSourceReading = InputSourceReading {
@@ -297,158 +297,140 @@ mod tests {
         assert_eq!(json["code"], "nativeUnavailable");
     }
 
+    /// A read is the only thing that can ever authorize a probe — this is the fact the whole
+    /// gate depends on, so it gets its own test rather than being assumed by the gate tests.
     #[tokio::test]
-    async fn discovery_probe_input_accepts_valid_display_and_value() {
-        let app = app_with_discovery(MockDiscovery::available_with_probe_current(
+    async fn reading_input_source_records_value_as_observed() {
+        let state =
+            state_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+        assert!(!state.is_observed_input_value("K@P:d0e5:0", 4626));
+
+        let app = router(state.clone());
+        let (status, _) = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/input-source").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(state.is_observed_input_value("K@P:d0e5:0", 4626));
+    }
+
+    #[tokio::test]
+    async fn reading_one_display_does_not_authorize_probing_another() {
+        let state = state_with_discovery(MockDiscovery::available(
+            vec!["K@P:d0e5:0", "KJL:0e25:2"],
+            READING_4626,
+        ));
+        let app = router(state.clone());
+        let _ = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/input-source").await;
+
+        assert!(state.is_observed_input_value("K@P:d0e5:0", 4626));
+        assert!(!state.is_observed_input_value("KJL:0e25:2", 4626));
+    }
+
+    #[test]
+    fn probe_input_gated_rejects_value_never_observed() {
+        let state = state_with_discovery(MockDiscovery::available_with_probe_current(
             vec!["K@P:d0e5:0"],
             Some(4626),
         ));
 
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
+        let err = discovery::probe_input_gated(&state, "K@P:d0e5:0", 4626)
+            .expect_err("unobserved value must be rejected");
 
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(json["accepted"], true);
-        assert_eq!(json["displayId"], "K@P:d0e5:0");
-        assert_eq!(json["value"], 4626);
-        assert_eq!(json["current"], 4626);
+        assert_eq!(err.code, "valueNotObserved");
+        assert!(err.error.contains("4626"));
     }
 
-    #[tokio::test]
-    async fn discovery_probe_input_works_without_config() {
-        let app = router(Arc::new(AppState::with_discovery(
-            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "deskmux.config.json").into()),
-            Box::new(MockDiscovery::available_with_probe_current(
-                vec!["K@P:d0e5:0"],
-                None,
-            )),
-        )));
+    #[test]
+    fn probe_input_gated_accepts_previously_observed_value() {
+        let state = state_with_discovery(MockDiscovery::available_with_probe_current(
+            vec!["K@P:d0e5:0"],
+            Some(4626),
+        ));
+        state.record_observed_input_value("K@P:d0e5:0", 4626);
 
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
+        let result = discovery::probe_input_gated(&state, "K@P:d0e5:0", 4626)
+            .expect("observed value must be accepted");
 
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(json["accepted"], true);
+        assert!(result.accepted);
+        assert_eq!(result.display_id, "K@P:d0e5:0");
+        assert_eq!(result.value, 4626);
+        assert_eq!(result.current, Some(4626));
     }
 
-    #[tokio::test]
-    async fn discovery_probe_input_invalid_json_returns_400() {
-        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":"4626"}"#,
-        )
-        .await;
+    /// The gate must key off (displayId, value) together — a value observed on one display
+    /// must not authorize probing a different display with that same numeric value.
+    #[test]
+    fn probe_input_gated_isolates_observed_values_per_display() {
+        let state = state_with_discovery(MockDiscovery::available_with_probe_current(
+            vec!["A:0000:0", "B:0000:0"],
+            Some(15),
+        ));
+        state.record_observed_input_value("A:0000:0", 15);
 
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(json["code"], "badRequest");
+        let err = discovery::probe_input_gated(&state, "B:0000:0", 15)
+            .expect_err("value observed on a different display must not authorize this one");
+
+        assert_eq!(err.code, "valueNotObserved");
     }
 
-    #[tokio::test]
-    async fn discovery_probe_input_out_of_range_value_returns_400() {
-        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":70000}"#,
-        )
-        .await;
+    #[test]
+    fn probe_input_gated_missing_display_is_404_shaped() {
+        let state = state_with_discovery(MockDiscovery::available_with_probe_current(
+            vec!["K@P:d0e5:0"],
+            Some(4626),
+        ));
+        state.record_observed_input_value("GHOST:0000:0", 4626);
 
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(json["code"], "badRequest");
+        let err = discovery::probe_input_gated(&state, "GHOST:0000:0", 4626)
+            .expect_err("unknown display must fail even with an observed value");
+
+        assert_eq!(err.code, "displayNotFound");
     }
 
-    #[tokio::test]
-    async fn discovery_probe_input_missing_display_is_404() {
-        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/GHOST%3A0000%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
+    #[test]
+    fn probe_input_gated_unavailable_platform_surfaces_native_unavailable() {
+        let state = state_with_discovery(MockDiscovery::unavailable());
+        state.record_observed_input_value("K@P:d0e5:0", 4626);
 
-        assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(json["code"], "displayNotFound");
+        let err = discovery::probe_input_gated(&state, "K@P:d0e5:0", 4626)
+            .expect_err("should be unavailable");
+
+        assert_eq!(err.code, "nativeUnavailable");
     }
 
-    #[tokio::test]
-    async fn discovery_probe_input_unavailable_platform_is_501() {
-        let app = app_with_discovery(MockDiscovery::unavailable());
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
-
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
-        assert_eq!(json["code"], "nativeUnavailable");
-    }
-
-    #[tokio::test]
-    async fn discovery_probe_input_write_failure_is_500_with_code() {
-        let app = app_with_discovery(MockDiscovery::failing_probe(
+    #[test]
+    fn probe_input_gated_write_failure_is_vcp_write_failed() {
+        let state = state_with_discovery(MockDiscovery::failing_probe(
             vec!["K@P:d0e5:0"],
             DiscoveryError::VcpWriteFailed {
                 detail: "monitor rejected write".to_string(),
             },
         ));
-        let (status, json) = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
+        state.record_observed_input_value("K@P:d0e5:0", 4626);
 
-        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(json["code"], "vcpWriteFailed");
+        let err = discovery::probe_input_gated(&state, "K@P:d0e5:0", 4626)
+            .expect_err("write failure must surface");
+
+        assert_eq!(err.code, "vcpWriteFailed");
     }
 
-    #[tokio::test]
-    async fn discovery_probe_input_records_success_and_failure_events() {
-        let app = app_with_discovery(MockDiscovery::failing_probe(
-            vec!["K@P:d0e5:0"],
-            DiscoveryError::VcpWriteFailed {
-                detail: "monitor rejected write".to_string(),
-            },
-        ));
-        let _ = post_json(
-            &app,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
-        let (_, failure_events) = get(&app, "/events").await;
-        assert!(failure_events["events"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Test switch failed"));
-
-        let app_success = app_with_discovery(MockDiscovery::available_with_probe_current(
+    #[test]
+    fn probe_input_gated_records_success_and_failure_events() {
+        let rejected_state = state_with_discovery(MockDiscovery::available_with_probe_current(
             vec!["K@P:d0e5:0"],
             Some(4626),
         ));
-        let _ = post_json(
-            &app_success,
-            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
-            r#"{"value":4626}"#,
-        )
-        .await;
-        let (_, success_events) = get(&app_success, "/events").await;
-        assert!(success_events["events"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Test switch accepted"));
+        let _ = discovery::probe_input_gated(&rejected_state, "K@P:d0e5:0", 4626);
+        let rejected_events = rejected_state.events.lock().unwrap().recent(1);
+        assert!(rejected_events[0].message.contains("Test switch failed"));
+
+        let accepted_state = state_with_discovery(MockDiscovery::available_with_probe_current(
+            vec!["K@P:d0e5:0"],
+            Some(4626),
+        ));
+        accepted_state.record_observed_input_value("K@P:d0e5:0", 4626);
+        let _ = discovery::probe_input_gated(&accepted_state, "K@P:d0e5:0", 4626);
+        let accepted_events = accepted_state.events.lock().unwrap().recent(1);
+        assert!(accepted_events[0].message.contains("Test switch accepted"));
     }
 
     async fn get_with_origin(

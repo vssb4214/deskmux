@@ -1,11 +1,17 @@
-//! HTTP surface for in-app native DDC discovery and setup-time probe writes (see
-//! docs/NATIVE_DDC_DISCOVERY.md). Works without a loaded config — first-run means no config
-//! exists yet, which is exactly when discovery and test switching matter.
+//! HTTP surface for in-app native DDC discovery (see docs/NATIVE_DDC_DISCOVERY.md). Works
+//! without a loaded config — first-run means no config exists yet, which is exactly when
+//! discovery matters.
+//!
+//! Probe (test-switch) writes are deliberately NOT exposed here. Discovery reads are safe on
+//! any local process that can reach the loopback API; a probe write is not, so it's reachable
+//! only via the Tauri `probe_input` IPC command (`commands.rs`) — invokable solely from the
+//! bundled webview, never plain HTTP. `probe_input_gated` below is that command's business
+//! logic, kept in this module because it reuses `DiscoverySource` and `AppState` directly.
 
 use std::sync::Arc;
 
 use axum::{
-    extract::{rejection::JsonRejection, Path, State},
+    extract::{Path, State},
     http::StatusCode,
     Json,
 };
@@ -16,7 +22,7 @@ use crate::executor::discovery::{self, DiscoveredDisplay, DiscoveryError, InputS
 use super::handlers::AppState;
 use super::types::{
     DiscoveryDisplaySummary, DiscoveryDisplaysResponse, DiscoveryErrorResponse,
-    InputSourceResponse, ProbeInputRequest, ProbeInputResponse,
+    InputSourceResponse, ProbeInputResponse,
 };
 
 /// Where discovery results come from, behind a trait so handler tests inject scripted sources
@@ -88,13 +94,20 @@ pub async fn read_input_source_handler(
     State(state): State<Arc<AppState>>,
     Path(display_id): Path<String>,
 ) -> Result<Json<InputSourceResponse>, (StatusCode, Json<DiscoveryErrorResponse>)> {
-    let result =
-        tokio::task::spawn_blocking(move || state.discovery.read_input_source(&display_id))
-            .await
-            .map_err(join_error)?;
+    let display_id_for_record = display_id.clone();
+    let state_for_read = state.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        state_for_read.discovery.read_input_source(&display_id)
+    })
+    .await
+    .map_err(join_error)?;
 
     result
         .map(|reading| {
+            // Only a successful read ever authorizes a probe of this value — see
+            // AppState::record_observed_input_value.
+            state.record_observed_input_value(&display_id_for_record, reading.current);
             Json(InputSourceResponse {
                 current: reading.current,
                 maximum: reading.maximum,
@@ -103,41 +116,55 @@ pub async fn read_input_source_handler(
         .map_err(discovery_error)
 }
 
-pub async fn probe_input_handler(
-    State(state): State<Arc<AppState>>,
-    Path(display_id): Path<String>,
-    body: Result<Json<ProbeInputRequest>, JsonRejection>,
-) -> Result<Json<ProbeInputResponse>, (StatusCode, Json<DiscoveryErrorResponse>)> {
-    let Json(body) = body.map_err(|_| bad_request("invalid JSON body"))?;
-    let value = body.value;
-    let display_id_for_event = display_id.clone();
-    let state_for_probe = state.clone();
+/// Business logic for the Tauri `probe_input` command (see `commands.rs`). Writes only if
+/// `value` has previously been observed as a real `current` reading for `display_id` — enforced
+/// here, not just in whatever UI calls this, so the check can't be bypassed by invoking the
+/// command directly with an untested value.
+pub fn probe_input_gated(
+    state: &AppState,
+    display_id: &str,
+    value: u16,
+) -> Result<ProbeInputResponse, DiscoveryErrorResponse> {
+    if !state.is_observed_input_value(display_id, u32::from(value)) {
+        let message = format!(
+            "value {value} has not been read as the current input on display '{display_id}' \
+             this session — read this display's current input before probing a value"
+        );
+        record_probe_input_result(
+            &state.events,
+            display_id,
+            value,
+            false,
+            Some(message.clone()),
+        );
+        return Err(DiscoveryErrorResponse {
+            error: message,
+            code: "valueNotObserved".to_string(),
+        });
+    }
 
-    let result = tokio::task::spawn_blocking(move || {
-        state_for_probe.discovery.probe_input(&display_id, value)
-    })
-    .await
-    .map_err(join_error)?;
-
-    match result {
+    match state.discovery.probe_input(display_id, value) {
         Ok(probe) => {
-            record_probe_input_result(&state.events, &display_id_for_event, value, true, None);
-            Ok(Json(ProbeInputResponse {
+            record_probe_input_result(&state.events, display_id, value, true, None);
+            Ok(ProbeInputResponse {
                 accepted: probe.accepted,
-                display_id: display_id_for_event,
+                display_id: display_id.to_string(),
                 value,
                 current: probe.current,
-            }))
+            })
         }
         Err(err) => {
             record_probe_input_result(
                 &state.events,
-                &display_id_for_event,
+                display_id,
                 value,
                 false,
                 Some(err.to_string()),
             );
-            Err(discovery_error(err))
+            Err(DiscoveryErrorResponse {
+                error: err.to_string(),
+                code: err.code().to_string(),
+            })
         }
     }
 }
@@ -165,16 +192,6 @@ fn join_error(err: tokio::task::JoinError) -> (StatusCode, Json<DiscoveryErrorRe
         Json(DiscoveryErrorResponse {
             error: format!("discovery task failed: {err}"),
             code: "internal".to_string(),
-        }),
-    )
-}
-
-fn bad_request(message: &str) -> (StatusCode, Json<DiscoveryErrorResponse>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(DiscoveryErrorResponse {
-            error: message.to_string(),
-            code: "badRequest".to_string(),
         }),
     )
 }

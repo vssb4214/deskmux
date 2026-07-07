@@ -33,6 +33,7 @@ pub fn run() {
             commands::get_api_base_url,
             commands::validate_config_draft,
             commands::save_config_draft,
+            commands::probe_input,
         ])
         .setup(|app| {
             let config_path = config::default_config_path();
@@ -74,6 +75,10 @@ pub fn run() {
             ));
             let api_base_url = api_base_url_from_config(app_state.config.as_ref());
             app.manage(BootstrapState { api_base_url });
+            // Same Arc the HTTP server below uses, so the `probe_input` IPC command and the
+            // HTTP read handler share one AppState — a read on either surface authorizes a
+            // probe via the other. See AppState::observed_input_values.
+            app.manage(app_state.clone());
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {

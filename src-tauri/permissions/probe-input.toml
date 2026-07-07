@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "probe-input"
+description = "Allows the dashboard to test-switch a native DDC display to a previously observed input value."
+commands.allow = ["probe_input"]

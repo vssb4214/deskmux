@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use axum::{
@@ -22,6 +23,13 @@ pub struct AppState {
     pub last_applied_preset: Mutex<Option<String>>,
     pub events: Mutex<EventLog>,
     pub discovery: Box<dyn DiscoverySource>,
+    /// Per-display set of VCP 0x60 values a read has actually returned this session. The probe
+    /// gate (`api::discovery::probe_input_gated`) only allows writing values present here — a
+    /// probe can replay a value we know is real for this display, never a blind guess. Populated
+    /// exclusively by successful reads (`read_input_source_handler`); shared with the Tauri
+    /// `probe_input` command via the same `Arc<AppState>` the HTTP server uses, so there is one
+    /// source of truth regardless of which surface a read or probe comes through.
+    observed_input_values: Mutex<HashMap<String, HashSet<u32>>>,
 }
 
 impl AppState {
@@ -57,6 +65,7 @@ impl AppState {
                     last_applied_preset: Mutex::new(None),
                     events,
                     discovery,
+                    observed_input_values: Mutex::new(HashMap::new()),
                 }
             }
             Err(err) => {
@@ -68,9 +77,36 @@ impl AppState {
                     last_applied_preset: Mutex::new(None),
                     events,
                     discovery,
+                    observed_input_values: Mutex::new(HashMap::new()),
                 }
             }
         }
+    }
+
+    /// Records `value` as a real state `display_id` was observed in via a successful VCP read.
+    /// Called only from the discovery read path — never from probe itself, so a probe can't
+    /// bootstrap its own permission by "observing" the value it just wrote.
+    pub fn record_observed_input_value(&self, display_id: &str, value: u32) {
+        let mut observed = self
+            .observed_input_values
+            .lock()
+            .expect("observed_input_values lock poisoned");
+        observed
+            .entry(display_id.to_string())
+            .or_default()
+            .insert(value);
+    }
+
+    /// Whether a read has ever returned `value` as the current input for `display_id` this
+    /// session. The probe gate's sole authorization check.
+    pub fn is_observed_input_value(&self, display_id: &str, value: u32) -> bool {
+        let observed = self
+            .observed_input_values
+            .lock()
+            .expect("observed_input_values lock poisoned");
+        observed
+            .get(display_id)
+            .is_some_and(|values| values.contains(&value))
     }
 }
 
