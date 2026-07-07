@@ -68,6 +68,7 @@
  *   displays: DiscoveryDisplaySummary[]
  * }} DiscoveryDisplaysResponse
  * @typedef {{ current: number, maximum: number }} InputSourceResponse
+ * @typedef {{ accepted: boolean, displayId: string, value: number, current?: number }} ProbeInputResponse
  * @typedef {'dry-run' | 'planning-failed' | 'success' | 'partial' | 'failed'} ApplySummaryClass
  */
 
