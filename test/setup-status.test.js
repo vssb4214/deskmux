@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   deriveSetupStatus,
+  getSetupChecklistPresentation,
   getSetupStatusCopy,
   setupStatusBadgeClass,
 } from '../src/lib/setup-status.js';
@@ -53,4 +54,21 @@ test('getSetupStatusCopy for restartRequired mentions restart', () => {
 test('setupStatusBadgeClass maps statuses to badge classes', () => {
   assert.match(setupStatusBadgeClass('ready'), /badge-ok/);
   assert.match(setupStatusBadgeClass('needsSetup'), /badge-error/);
+});
+
+test('getSetupChecklistPresentation collapses setup when ready', () => {
+  const presentation = getSetupChecklistPresentation('ready', true);
+  assert.equal(presentation.mode, 'collapsed');
+  assert.equal(presentation.summary, 'Run setup again');
+});
+
+test('getSetupChecklistPresentation expands setup when config is missing', () => {
+  const presentation = getSetupChecklistPresentation('needsSetup', false);
+  assert.equal(presentation.mode, 'expanded');
+  assert.equal(presentation.summary, 'Set up DeskMux');
+});
+
+test('getSetupChecklistPresentation expands setup while restart is required', () => {
+  const presentation = getSetupChecklistPresentation('restartRequired', false);
+  assert.equal(presentation.mode, 'expanded');
 });

@@ -79,11 +79,12 @@ fn record_apply_outcome(
     );
     for monitor_result in &result.local_results {
         if monitor_result.is_native_ddc {
-            let success = monitor_outcome_ok(&monitor_result.outcome);
+            let outcome_ok = monitor_outcome_ok(&monitor_result.outcome);
             record_native_ddc_result(
                 &state.events,
                 &monitor_result.monitor_id,
-                success,
+                dry_run,
+                outcome_ok,
                 Some(preset),
                 Some(source),
             );
@@ -231,5 +232,92 @@ mod tests {
         assert!(events
             .iter()
             .any(|e| e.message.contains("Native DDC input switch succeeded")));
+    }
+
+    #[tokio::test]
+    async fn dry_run_native_ddc_events_describe_planned_action() {
+        let state = Arc::new(AppState::from_load_result(Ok(native_ddc_test_config())));
+        let result = CoordinatedApplyResult {
+            preset: "all_a".to_string(),
+            dry_run: true,
+            local_only: true,
+            planning_errors: vec![],
+            local_results: vec![MonitorResult {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-a".to_string(),
+                command: Some("native DDC: display 'K@P:d0e5:0' VCP 0x60 = 4626".to_string()),
+                executed: false,
+                is_native_ddc: true,
+                outcome: MonitorOutcome::DryRun,
+            }],
+            peer_results: vec![],
+        };
+
+        record_apply_outcome(&state, "all_a", true, ApplySource::Api, &result);
+
+        let events = state.events.lock().unwrap().recent(MAX_EVENTS);
+        let native_event = events
+            .iter()
+            .find(|e| e.monitor_id.as_deref() == Some("monitor1"))
+            .expect("native ddc event should be recorded");
+
+        assert_eq!(native_event.kind, EventKind::Info);
+        assert!(native_event.message.contains("Dry-run"));
+        assert!(native_event.message.contains("would switch"));
+        assert!(!native_event.message.contains("succeeded"));
+    }
+
+    #[tokio::test]
+    async fn real_native_ddc_apply_events_still_report_success() {
+        let state = Arc::new(AppState::from_load_result(Ok(native_ddc_test_config())));
+        let result = CoordinatedApplyResult {
+            preset: "all_a".to_string(),
+            dry_run: false,
+            local_only: true,
+            planning_errors: vec![],
+            local_results: vec![MonitorResult {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-a".to_string(),
+                command: Some("native DDC: display 'K@P:d0e5:0' VCP 0x60 = 4626".to_string()),
+                executed: true,
+                is_native_ddc: true,
+                outcome: MonitorOutcome::Success {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            }],
+            peer_results: vec![],
+        };
+
+        record_apply_outcome(&state, "all_a", false, ApplySource::Api, &result);
+
+        let events = state.events.lock().unwrap().recent(MAX_EVENTS);
+        assert!(events.iter().any(|e| {
+            e.message.contains("Native DDC input switch succeeded") && e.kind == EventKind::Success
+        }));
+    }
+
+    fn native_ddc_test_config() -> Config {
+        let json = r#"{
+            "deviceName": "device-a",
+            "peers": [],
+            "devices": [{ "id": "device-a", "label": "Device A" }],
+            "monitors": [{
+                "id": "monitor1",
+                "label": "Monitor 1",
+                "order": 0,
+                "nativeDdc": { "displayId": "K@P:d0e5:0" },
+                "inputs": {
+                    "device-a": {
+                        "type": "displayport",
+                        "nativeDdc": { "inputSourceValue": 4626 }
+                    }
+                }
+            }],
+            "presets": {
+                "all_a": { "label": "All A", "layout": { "monitor1": "device-a" } }
+            }
+        }"#;
+        serde_json::from_str(json).expect("fixture config should parse")
     }
 }

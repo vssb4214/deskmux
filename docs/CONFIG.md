@@ -1,10 +1,27 @@
 # Configuration
 
-DeskMux reads `deskmux.config.json` from the project root at startup. Copy the template and edit it for your hardware:
+DeskMux reads `deskmux.config.json` from the **process working directory** at startup and when saving from the desktop app. The filename is always `deskmux.config.json`; load and save use the same resolved path.
+
+Copy the template next to where DeskMux runs:
 
 ```bash
 cp deskmux.config.example.json deskmux.config.json
 ```
+
+**Where that file lives depends on how you start DeskMux:**
+
+| How you run | Typical working directory | Config path |
+|-------------|-------------------------|-------------|
+| `npm run tauri dev` | `src-tauri/` | `src-tauri/deskmux.config.json` |
+| Installed app / `deskmux.exe` | Directory containing the executable | `./deskmux.config.json` beside the binary |
+
+On startup DeskMux logs the exact path it tried, for example:
+
+```text
+deskmux: loading config from C:\path\to\src-tauri\deskmux.config.json
+```
+
+`/health` and dashboard config errors include the same path when load fails. There is no alternate search path and no UI/API argument to pick a different file.
 
 `deskmux.config.json` is gitignored — it describes *your* desk, so it stays out of the repo.
 
@@ -28,7 +45,7 @@ From the DeskMux window, the **Config draft** card lets you paste or edit JSON, 
 3. Write pretty-printed JSON to `deskmux.config.json.tmp`, then rename into `deskmux.config.json` (atomic on Windows and POSIX).
 4. Return `restartRequired: true`. DeskMux does **not** hot-reload config — restart the app for the new file to take effect.
 
-The save path is fixed (`deskmux.config.json` in the app working directory). IPC commands do not accept a path argument.
+The save path is fixed (`deskmux.config.json` in the app working directory — see table above). IPC commands do not accept a path argument.
 
 
 | Field                      | Type    | Description                                                                    |

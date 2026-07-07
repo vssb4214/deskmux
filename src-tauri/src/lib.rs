@@ -35,11 +35,24 @@ pub fn run() {
             commands::save_config_draft,
         ])
         .setup(|app| {
-            let config_result = config::load_config(config::default_config_path());
+            let config_path = config::default_config_path();
+            println!(
+                "deskmux: loading config from {}",
+                config_path.display()
+            );
+            let config_result = config::load_config(&config_path);
             match &config_result {
-                Ok(cfg) => println!("deskmux: loaded config for device '{}'", cfg.device_name),
+                Ok(cfg) => println!(
+                    "deskmux: loaded config for device '{}' from {}",
+                    cfg.device_name,
+                    config_path.display()
+                ),
                 Err(err) => {
-                    eprintln!("deskmux: failed to load deskmux.config.json\n{err}");
+                    eprintln!(
+                        "deskmux: failed to load config from {}\n{}",
+                        config_path.display(),
+                        config::format_config_load_error(&config_path, err)
+                    );
                 }
             }
 
@@ -55,7 +68,10 @@ pub fn run() {
                     );
                 }
             }
-            let app_state = Arc::new(AppState::from_load_result(config_result));
+            let app_state = Arc::new(AppState::from_load_result_at(
+                &config_path,
+                config_result,
+            ));
             let api_base_url = api_base_url_from_config(app_state.config.as_ref());
             app.manage(BootstrapState { api_base_url });
 

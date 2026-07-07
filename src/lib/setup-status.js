@@ -81,6 +81,21 @@ export function getSetupStatusCopy(status, health = {}) {
 
 /**
  * @param {SetupStatus} status
+ * @param {boolean} configLoaded
+ * @returns {{ mode: 'expanded' | 'collapsed' | 'hidden', summary: string }}
+ */
+export function getSetupChecklistPresentation(status, configLoaded) {
+  if (configLoaded && status === 'ready') {
+    return { mode: 'collapsed', summary: 'Run setup again' };
+  }
+  if (!configLoaded) {
+    return { mode: 'expanded', summary: 'Set up DeskMux' };
+  }
+  return { mode: 'hidden', summary: '' };
+}
+
+/**
+ * @param {SetupStatus} status
  * @returns {string}
  */
 export function setupStatusBadgeClass(status) {

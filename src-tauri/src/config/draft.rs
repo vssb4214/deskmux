@@ -25,7 +25,7 @@ pub fn parse_config_draft(json: &str) -> Result<Config, LoadError> {
 
 /// Validate and atomically write a config draft to the fixed default path.
 pub fn save_config_draft(json: &str) -> Result<SaveConfigResult, LoadError> {
-    save_config_draft_at(default_config_path(), json)
+    save_config_draft_at(&default_config_path(), json)
 }
 
 /// Validate and atomically write a config draft to `path` (tests supply a temp path).
@@ -254,7 +254,11 @@ mod tests {
     }
 
     #[test]
-    fn default_config_path_matches_startup_filename() {
-        assert_eq!(default_config_path(), Path::new(CONFIG_FILENAME));
+    fn default_config_path_uses_config_filename() {
+        let path = default_config_path();
+        assert_eq!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some(CONFIG_FILENAME)
+        );
     }
 }

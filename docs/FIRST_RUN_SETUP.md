@@ -6,7 +6,7 @@ Goal: someone new can go from zero to a working `deskmux.config.json` without ha
 
 ## Using the dashboard checklist today
 
-When DeskMux starts without a valid config, open the desktop app and follow **Set up DeskMux**:
+When DeskMux starts without a valid config, open the desktop app and follow **Set up DeskMux** (expanded automatically). After configuration loads, setup tools collapse behind **Run setup again**.
 
 1. **Name this computer** — readable label and derived config id (for example “Gaming PC” → `gaming_pc`).
 2. **Detect monitors** — uses `GET /native-ddc/displays` on Windows; name each display (for example “Left monitor”).
