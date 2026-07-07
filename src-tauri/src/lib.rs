@@ -29,9 +29,13 @@ pub fn run() {
     }
 
     builder
-        .invoke_handler(tauri::generate_handler![commands::get_api_base_url])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_api_base_url,
+            commands::validate_config_draft,
+            commands::save_config_draft,
+        ])
         .setup(|app| {
-            let config_result = config::load_config(std::path::Path::new("deskmux.config.json"));
+            let config_result = config::load_config(config::default_config_path());
             match &config_result {
                 Ok(cfg) => println!("deskmux: loaded config for device '{}'", cfg.device_name),
                 Err(err) => {

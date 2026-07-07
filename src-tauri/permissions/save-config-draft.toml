@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "save-config-draft"
+description = "Allows the dashboard to save a validated config draft to the fixed config path."
+commands.allow = ["save_config_draft"]
