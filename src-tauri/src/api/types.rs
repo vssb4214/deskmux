@@ -94,6 +94,22 @@ pub struct InputSourceResponse {
     pub maximum: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeInputRequest {
+    pub value: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeInputResponse {
+    pub accepted: bool,
+    pub display_id: String,
+    pub value: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<u32>,
+}
+
 /// Discovery errors carry a stable machine-readable `code` (see docs/NATIVE_DDC_DISCOVERY.md)
 /// alongside the human-readable message, unlike the config-flavored `ErrorResponse`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

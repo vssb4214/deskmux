@@ -1,9 +1,10 @@
 # Native DDC input discovery — technical design
 
-**Status:** read path implemented — display enumeration and VCP 0x60 reads are live via
+**Status:** read path and setup probe-write are implemented — display enumeration, VCP 0x60 reads,
+and setup-time test writes are live via
 `GET /native-ddc/displays` and `GET /native-ddc/displays/{displayId}/input-source`, surfaced in
-the dashboard's "Monitor discovery" card, with the retry-once refresh policy below.
-Probe-write, capabilities-string parsing, and the onboarding wizard are still pending. This
+the dashboard's "Monitor discovery" card, plus `POST /native-ddc/displays/{displayId}/probe-input`.
+Capabilities-string parsing and the onboarding wizard are still pending. This
 document captures what real-hardware validation proved and how DeskMux exposes discovery
 without a separate diagnostic session.
 
@@ -68,7 +69,7 @@ New module `executor::discovery` (or `api::discovery`) with pure functions:
 
 `probe_input_write` is for onboarding “test this input” buttons, gated behind user confirmation and dry-run style UX — never silent.
 
-### 3. HTTP API (future PR)
+### 3. HTTP API
 
 ```
 GET /native-ddc/displays
@@ -78,15 +79,13 @@ POST /native-ddc/displays/{displayId}/probe-input   { "value": 4626 }  // explic
 
 Responses are JSON, camelCase, no shell commands, no secrets.
 
-Alternatively, fold into a single `GET /discovery` during first-run wizard development — split endpoints are easier to test incrementally.
-
 ### 4. Error taxonomy
 
 | Code | Meaning | User-facing hint |
 |------|---------|------------------|
 | `displayNotFound` | `displayId` not in current enumeration | Re-plug monitor; check startup log |
 | `vcpReadFailed` | DDC read returned failure | Monitor may not support DDC on this port |
-| `vcpWriteRejected` | SetVCPFeature failed | Try shell fallback; some LG/Apple Silicon HDMI paths are DDC-blind |
+| `vcpWriteFailed` | SetVCPFeature failed | Try shell fallback; some panels read but reject input writes |
 | `staleHandle` | Read failed, succeeded after refresh | Transient; retry once in UI |
 
 ### 5. Onboarding integration (later)
@@ -120,7 +119,7 @@ Discovery API feeds a first-run wizard (see `docs/FIRST_RUN_SETUP.md`):
 1. ~~`get_vcp_feature` on trait + Windows impl + retry refresh.~~ Done.
 2. ~~`GET /native-ddc/displays` and `GET .../input-source`.~~ Done.
 3. ~~Dashboard “Discovery” panel (read-only).~~ Done ("Monitor discovery" card).
-4. Probe-write behind confirmation button.
+4. ~~Probe-write endpoint for explicit setup-time test switches.~~ Done — `POST /native-ddc/displays/{id}/probe-input`.
 5. First-run wizard consumes discovery API (see [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md)).
 
 ## Related docs

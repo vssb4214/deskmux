@@ -194,6 +194,7 @@ DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`
 - `GET /events` — recent activity (see below). Always returns 200, even when config failed to load.
 - `GET /native-ddc/displays` — native DDC display discovery (see below). Works without a loaded config.
 - `GET /native-ddc/displays/{displayId}/input-source` — read the current VCP `0x60` input-source value (see below). Works without a loaded config.
+- `POST /native-ddc/displays/{displayId}/probe-input` — setup-time test switch for one native DDC VCP `0x60` value (see below). Works without a loaded config.
 - `POST /apply-preset` — apply a named preset (see below). Returns the same **503** shape when config did not load.
 
 ### `GET /health`
@@ -257,6 +258,40 @@ hotplug). Discovery never writes to the monitor.
 |--------|--------|---------|
 | 404 | `displayNotFound` | `displayId` not in the current enumeration |
 | 500 | `vcpReadFailed` / `enumerationFailed` | DDC read failed even after refresh / enumeration failed |
+| 501 | `nativeUnavailable` | Not a Windows build |
+
+### `POST /native-ddc/displays/{displayId}/probe-input`
+
+Setup-time probe write for one native DDC input value (VCP `0x60`).
+
+**Request** (`application/json`): `{ "value": 4626 }`
+
+**Response** (200 on accepted write):
+
+```json
+{
+  "accepted": true,
+  "displayId": "K@P:d0e5:0",
+  "value": 4626,
+  "current": 4626
+}
+```
+
+`current` is best-effort read-back after the write and may be omitted if read-back fails.
+
+This endpoint is intentionally narrow:
+
+- One request = one write attempt (no automatic write retries).
+- Numeric `value` only (`u16` range).
+- No shell command inputs, no arbitrary VCP code inputs, no config required.
+
+Errors use the same `{ error, code }` envelope:
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| 400 | `badRequest` | Invalid JSON/value type/out-of-range value |
+| 404 | `displayNotFound` | `displayId` not in current enumeration |
+| 500 | `vcpWriteFailed` | Native DDC write attempt failed |
 | 501 | `nativeUnavailable` | Not a Windows build |
 
 ### `POST /apply-preset`

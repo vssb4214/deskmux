@@ -187,6 +187,42 @@ pub fn record_native_ddc_result(
     });
 }
 
+pub fn record_probe_input_result(
+    events: &Mutex<EventLog>,
+    display_id: &str,
+    value: u16,
+    accepted: bool,
+    detail: Option<String>,
+) {
+    let mut log = events.lock().expect("event log lock poisoned");
+    let (kind, message) = if accepted {
+        (
+            EventKind::Success,
+            format!("Test switch accepted for display '{display_id}' with input value {value}"),
+        )
+    } else {
+        let suffix = detail
+            .as_deref()
+            .map(|d| format!(": {d}"))
+            .unwrap_or_default();
+        (
+            EventKind::Error,
+            format!(
+                "Test switch failed for display '{display_id}' with input value {value}{suffix}"
+            ),
+        )
+    };
+
+    log.push(DeskMuxEvent {
+        timestamp_ms: now_ms(),
+        kind,
+        message,
+        preset: None,
+        source: None,
+        monitor_id: Some(display_id.to_string()),
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

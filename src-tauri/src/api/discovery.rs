@@ -1,20 +1,22 @@
-//! HTTP surface for in-app monitor discovery (see docs/NATIVE_DDC_DISCOVERY.md). Read-only:
-//! these endpoints never write to a monitor or to config. They work without a loaded config —
-//! first-run means no config exists yet, which is exactly when discovery matters.
+//! HTTP surface for in-app native DDC discovery and setup-time probe writes (see
+//! docs/NATIVE_DDC_DISCOVERY.md). Works without a loaded config — first-run means no config
+//! exists yet, which is exactly when discovery and test switching matter.
 
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{rejection::JsonRejection, Path, State},
     http::StatusCode,
     Json,
 };
 
+use crate::api::events::record_probe_input_result;
 use crate::executor::discovery::{self, DiscoveredDisplay, DiscoveryError, InputSourceReading};
 
 use super::handlers::AppState;
 use super::types::{
-    DiscoveryDisplaySummary, DiscoveryDisplaysResponse, DiscoveryErrorResponse, InputSourceResponse,
+    DiscoveryDisplaySummary, DiscoveryDisplaysResponse, DiscoveryErrorResponse,
+    InputSourceResponse, ProbeInputRequest, ProbeInputResponse,
 };
 
 /// Where discovery results come from, behind a trait so handler tests inject scripted sources
@@ -23,6 +25,11 @@ pub trait DiscoverySource: Send + Sync {
     fn native_available(&self) -> bool;
     fn list_displays(&self) -> Result<Vec<DiscoveredDisplay>, DiscoveryError>;
     fn read_input_source(&self, display_id: &str) -> Result<InputSourceReading, DiscoveryError>;
+    fn probe_input(
+        &self,
+        display_id: &str,
+        value: u16,
+    ) -> Result<discovery::ProbeInputResult, DiscoveryError>;
 }
 
 /// Production source: delegates to `executor::discovery` (real Windows DDC calls there;
@@ -40,6 +47,14 @@ impl DiscoverySource for NativeDiscoverySource {
 
     fn read_input_source(&self, display_id: &str) -> Result<InputSourceReading, DiscoveryError> {
         discovery::read_input_source(display_id)
+    }
+
+    fn probe_input(
+        &self,
+        display_id: &str,
+        value: u16,
+    ) -> Result<discovery::ProbeInputResult, DiscoveryError> {
+        discovery::probe_input(display_id, value)
     }
 }
 
@@ -88,13 +103,52 @@ pub async fn read_input_source_handler(
         .map_err(discovery_error)
 }
 
+pub async fn probe_input_handler(
+    State(state): State<Arc<AppState>>,
+    Path(display_id): Path<String>,
+    body: Result<Json<ProbeInputRequest>, JsonRejection>,
+) -> Result<Json<ProbeInputResponse>, (StatusCode, Json<DiscoveryErrorResponse>)> {
+    let Json(body) = body.map_err(|_| bad_request("invalid JSON body"))?;
+    let value = body.value;
+    let display_id_for_event = display_id.clone();
+    let state_for_probe = state.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        state_for_probe.discovery.probe_input(&display_id, value)
+    })
+    .await
+    .map_err(join_error)?;
+
+    match result {
+        Ok(probe) => {
+            record_probe_input_result(&state.events, &display_id_for_event, value, true, None);
+            Ok(Json(ProbeInputResponse {
+                accepted: probe.accepted,
+                display_id: display_id_for_event,
+                value,
+                current: probe.current,
+            }))
+        }
+        Err(err) => {
+            record_probe_input_result(
+                &state.events,
+                &display_id_for_event,
+                value,
+                false,
+                Some(err.to_string()),
+            );
+            Err(discovery_error(err))
+        }
+    }
+}
+
 fn discovery_error(err: DiscoveryError) -> (StatusCode, Json<DiscoveryErrorResponse>) {
     let status = match &err {
         DiscoveryError::DisplayNotFound { .. } => StatusCode::NOT_FOUND,
         DiscoveryError::NativeUnavailable => StatusCode::NOT_IMPLEMENTED,
-        DiscoveryError::EnumerationFailed { .. } | DiscoveryError::VcpReadFailed { .. } => {
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        DiscoveryError::EnumerationFailed { .. }
+        | DiscoveryError::VcpReadFailed { .. }
+        | DiscoveryError::VcpWriteFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
     };
     (
         status,
@@ -111,6 +165,16 @@ fn join_error(err: tokio::task::JoinError) -> (StatusCode, Json<DiscoveryErrorRe
         Json(DiscoveryErrorResponse {
             error: format!("discovery task failed: {err}"),
             code: "internal".to_string(),
+        }),
+    )
+}
+
+fn bad_request(message: &str) -> (StatusCode, Json<DiscoveryErrorResponse>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(DiscoveryErrorResponse {
+            error: message.to_string(),
+            code: "badRequest".to_string(),
         }),
     )
 }

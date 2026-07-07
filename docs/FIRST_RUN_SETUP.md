@@ -64,6 +64,12 @@ Per monitor × device pair where native DDC is desired:
 3. Store as `inputSourceValue` (u16 — may be > 255).
 4. Repeat for each input.
 
+Optional setup-time test switch (no saved config required):
+
+- `POST /native-ddc/displays/{displayId}/probe-input` with `{ "value": <u16> }`
+- Performs one explicit native DDC VCP `0x60` write attempt.
+- Response reports write acceptance; optional read-back may include `current`.
+
 For monitors without native DDC support, fall back to:
 
 - "Paste or pick a shell command" (ControlMyMonitor, ddcutil, etc.) — same as today.
@@ -96,6 +102,7 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 | Native DDC apply (u16) | Done |
 | Event history API | Done |
 | Discovery read API | Done — `GET /native-ddc/displays`, `GET /native-ddc/displays/{id}/input-source` (see [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md)) |
+| Discovery probe-write API | Done — `POST /native-ddc/displays/{id}/probe-input` (setup-time VCP `0x60` test switch; one write attempt per request) |
 | Discovery dashboard panel (read-only) | Done — "Monitor discovery" card |
 | Config draft validate/save (Tauri IPC) | Done — minimal "Config draft" dashboard card; full wizard still planned |
 | Guided setup checklist (dashboard) | Done — status bar + checklist + draft generation from captured readings |
@@ -119,7 +126,7 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 
 ## Suggested implementation order
 
-1. ~~Discovery HTTP API (read-only)~~ — done, with a read-only dashboard discovery panel
+1. ~~Discovery HTTP API (read + probe)~~ — done (`GET /native-ddc/displays`, `GET .../input-source`, `POST .../probe-input`)
 2. ~~Config draft validate/save via Tauri IPC~~ — done, with a minimal dashboard "Config draft" card
 3. ~~Guided setup checklist in dashboard~~ — done
 4. Wizard shell / tray entry (stepper UI, vanilla JS)
