@@ -60,7 +60,7 @@ npm run tauri dev
 8. **Restart DeskMux** so the new config loads.
 9. **Test a preset** with dry-run first.
 
-**Advanced — manual JSON:** copy [`deskmux.config.example.json`](deskmux.config.example.json) to `deskmux.config.json` and edit by hand. See [`docs/CONFIG.md`](docs/CONFIG.md) for the schema and platform examples.
+**Advanced — manual JSON:** copy [`deskmux.config.example.json`](deskmux.config.example.json) to `deskmux.config.json` beside where DeskMux runs and edit by hand. Under `npm run tauri dev` that is usually `src-tauri/deskmux.config.json` — startup logs the exact path. See [`docs/CONFIG.md`](docs/CONFIG.md) for the schema and platform examples.
 
 ## Usage
 

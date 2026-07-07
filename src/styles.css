@@ -416,6 +416,16 @@ body {
   font-size: 0.8rem;
 }
 
+.setup-checklist-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: -0.25rem 0 0.75rem;
+}
+
+.setup-checklist-body {
+  margin-top: 0.25rem;
+}
+
 .setup-checklist {
   list-style: none;
   margin: 0 0 1rem;

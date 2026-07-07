@@ -29,7 +29,7 @@ import {
   setPresetLabel,
   setReadingInputLabel,
 } from './lib/setup-session.js';
-import { deriveSetupStatus } from './lib/setup-status.js';
+import { deriveSetupStatus, getSetupChecklistPresentation } from './lib/setup-status.js';
 import { isTauriDesktop } from './lib/tauri.js';
 import {
   renderApplyResult,
@@ -90,6 +90,10 @@ const els = {
   applyPanel: document.getElementById('apply-panel'),
   eventsPanel: document.getElementById('events-panel'),
   eventsDetails: /** @type {HTMLDetailsElement} */ (document.getElementById('events-details')),
+  setupChecklistDetails: /** @type {HTMLDetailsElement} */ (
+    document.getElementById('setup-checklist-details')
+  ),
+  setupChecklistSummary: document.getElementById('setup-checklist-summary'),
   setupChecklistCard: document.getElementById('setup-checklist-card'),
   setupChecklist: document.getElementById('setup-checklist'),
   deviceNameInput: /** @type {HTMLInputElement} */ (document.getElementById('device-name-input')),
@@ -120,7 +124,10 @@ function getSetupStatus() {
 }
 
 function scrollToChecklist() {
-  els.setupChecklistCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  els.setupChecklistDetails?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (els.setupChecklistDetails) {
+    els.setupChecklistDetails.open = true;
+  }
 }
 
 function setControlsDisabled(disabled) {
@@ -201,7 +208,17 @@ function renderDashboardChrome() {
     renderSetupStartHint(els.setupStartSection);
   }
 
-  els.setupChecklistCard.hidden = configLoaded;
+  const presentation = getSetupChecklistPresentation(setupStatus, configLoaded);
+  if (els.setupChecklistDetails) {
+    els.setupChecklistDetails.hidden = presentation.mode === 'hidden';
+    if (presentation.mode !== 'hidden') {
+      if (els.setupChecklistSummary) {
+        els.setupChecklistSummary.textContent = presentation.summary;
+      }
+      els.setupChecklistDetails.open = presentation.mode === 'expanded';
+    }
+  }
+
   if (!configLoaded) {
     const steps = buildSetupChecklist(setupSession, setupStatus, {
       isDesktop: isTauriDesktop(),
