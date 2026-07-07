@@ -12,18 +12,19 @@ use std::io;
 use windows::core::BOOL;
 use windows::Win32::Devices::Display::{
     DestroyPhysicalMonitors, DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
-    GetNumberOfPhysicalMonitorsFromHMONITOR, GetPhysicalMonitorsFromHMONITOR, QueryDisplayConfig,
-    SetVCPFeature, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
-    DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
-    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_SOURCE_DEVICE_NAME,
-    DISPLAYCONFIG_TARGET_DEVICE_NAME, PHYSICAL_MONITOR, QDC_ONLY_ACTIVE_PATHS,
+    GetNumberOfPhysicalMonitorsFromHMONITOR, GetPhysicalMonitorsFromHMONITOR,
+    GetVCPFeatureAndVCPFeatureReply, QueryDisplayConfig, SetVCPFeature,
+    DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+    DISPLAYCONFIG_DEVICE_INFO_HEADER, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME, DISPLAYCONFIG_TARGET_DEVICE_NAME, PHYSICAL_MONITOR,
+    QDC_ONLY_ACTIVE_PATHS,
 };
 use windows::Win32::Foundation::{GetLastError, HANDLE, LPARAM, RECT};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW,
 };
 
-use super::native::{NativeDdcController, NativeDisplay};
+use super::native::{NativeDdcController, NativeDisplay, VcpReading};
 
 pub(super) struct WindowsDdcController;
 
@@ -42,22 +43,46 @@ impl NativeDdcController for WindowsDdcController {
     }
 
     fn set_vcp_feature(&self, display_id: &str, vcp_code: u8, value: u16) -> io::Result<()> {
-        let target = list_displays()
-            .map_err(to_io_error)?
-            .into_iter()
-            .find(|d| d.display_id == display_id)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!("display '{display_id}' not found"),
-                )
-            })?;
-
+        let target = find_display(display_id)?;
         with_physical_monitor(target.gdi_device_name, |handle| {
-            BOOL(unsafe { SetVCPFeature(handle, vcp_code, u32::from(value)) })
+            (unsafe { SetVCPFeature(handle, vcp_code, u32::from(value)) } != 0).then_some(())
         })
         .map_err(to_io_error)
     }
+
+    fn get_vcp_feature(&self, display_id: &str, vcp_code: u8) -> io::Result<VcpReading> {
+        let target = find_display(display_id)?;
+        with_physical_monitor(target.gdi_device_name, |handle| {
+            let mut current = 0u32;
+            let mut maximum = 0u32;
+            let ok = unsafe {
+                GetVCPFeatureAndVCPFeatureReply(
+                    handle,
+                    vcp_code,
+                    None,
+                    &mut current,
+                    Some(&mut maximum),
+                )
+            };
+            (ok != 0).then_some(VcpReading { current, maximum })
+        })
+        .map_err(to_io_error)
+    }
+}
+
+/// Re-enumerates and returns the display matching `display_id`, as a fresh lookup per call —
+/// deliberate, so callers retrying after a hotplug get refreshed handles rather than stale ones.
+fn find_display(display_id: &str) -> io::Result<FoundDisplay> {
+    list_displays()
+        .map_err(to_io_error)?
+        .into_iter()
+        .find(|d| d.display_id == display_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("display '{display_id}' not found"),
+            )
+        })
 }
 
 fn to_io_error(err: windows::core::Error) -> io::Error {
@@ -213,11 +238,13 @@ fn query_display_config() -> windows::core::Result<Vec<DISPLAYCONFIG_PATH_INFO>>
     }
 }
 
-/// Calls `f` with the physical monitor handle for the display at `gdi_device_name`, cleaning
-/// up via `DestroyPhysicalMonitors` regardless of the call's outcome.
-fn with_physical_monitor<F>(gdi_device_name: [u16; 32], f: F) -> windows::core::Result<()>
+/// Calls `f` with the physical monitor handle for the display at `gdi_device_name`, trying each
+/// physical monitor until `f` returns `Some`, cleaning up via `DestroyPhysicalMonitors`
+/// regardless of the call's outcome. `f` returns `Option<T>` rather than `BOOL` so the same
+/// helper serves both writes (`Option<()>`) and value-producing reads.
+fn with_physical_monitor<T, F>(gdi_device_name: [u16; 32], f: F) -> windows::core::Result<T>
 where
-    F: Fn(HANDLE) -> BOOL,
+    F: Fn(HANDLE) -> Option<T>,
 {
     let hmonitor = enum_display_monitors()?
         .into_iter()
@@ -232,8 +259,7 @@ where
 
     let result = physical_monitors
         .iter()
-        .find(|pm| f(pm.hPhysicalMonitor).as_bool())
-        .map(|_| ())
+        .find_map(|pm| f(pm.hPhysicalMonitor))
         .ok_or_else(last_error);
 
     unsafe {

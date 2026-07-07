@@ -1,11 +1,16 @@
 mod backend;
+pub mod discovery;
 mod model;
-#[cfg(target_os = "windows")]
 mod native;
 mod resolve;
 mod runner;
 #[cfg(target_os = "windows")]
 mod windows_ddc;
+
+/// VCP feature code for input-source select — the only capability the config schema exposes
+/// through `nativeDdc` today (see `InputNativeDdc` in config/model.rs), and the code the
+/// discovery module reads.
+pub(crate) const VCP_INPUT_SOURCE: u8 = 0x60;
 
 use std::io;
 

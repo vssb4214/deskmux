@@ -2,6 +2,7 @@ pub mod apply;
 pub mod bind;
 pub mod client;
 mod cors;
+pub mod discovery;
 pub mod events;
 mod handlers;
 #[cfg(test)]
@@ -31,6 +32,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/status", get(handlers::status))
         .route("/events", get(handlers::events))
         .route("/apply-preset", post(handlers::apply_preset_handler))
+        .route(
+            "/native-ddc/displays",
+            get(discovery::list_displays_handler),
+        )
+        .route(
+            "/native-ddc/displays/{display_id}/input-source",
+            get(discovery::read_input_source_handler),
+        )
         .layer(cors::dashboard_cors_layer())
         .with_state(state)
 }
@@ -44,6 +53,8 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::config::Config;
+    use crate::executor::discovery::{DiscoveredDisplay, DiscoveryError, InputSourceReading};
+    use discovery::DiscoverySource;
 
     fn app_with_config() -> Router {
         router(Arc::new(AppState::from_load_result(Ok(test_config()))))
@@ -53,6 +64,182 @@ mod tests {
         router(Arc::new(AppState::from_load_result(Err(
             std::io::Error::new(std::io::ErrorKind::NotFound, "deskmux.config.json").into(),
         ))))
+    }
+
+    /// Scripted discovery source so these tests are deterministic on every CI platform — the
+    /// real source would need actual display hardware on Windows and is a stub elsewhere.
+    struct MockDiscovery {
+        native_available: bool,
+        displays: Vec<String>,
+        read_behavior: ReadBehavior,
+    }
+
+    enum ReadBehavior {
+        /// Ok with this reading when the display is in `displays`; DisplayNotFound otherwise.
+        Reading(InputSourceReading),
+        /// Always this error, regardless of display.
+        Fail(DiscoveryError),
+    }
+
+    impl MockDiscovery {
+        fn available(displays: Vec<&str>, reading: InputSourceReading) -> Self {
+            Self {
+                native_available: true,
+                displays: displays.into_iter().map(str::to_string).collect(),
+                read_behavior: ReadBehavior::Reading(reading),
+            }
+        }
+
+        fn unavailable() -> Self {
+            Self {
+                native_available: false,
+                displays: Vec::new(),
+                read_behavior: ReadBehavior::Fail(DiscoveryError::NativeUnavailable),
+            }
+        }
+
+        fn failing_reads(displays: Vec<&str>, error: DiscoveryError) -> Self {
+            Self {
+                native_available: true,
+                displays: displays.into_iter().map(str::to_string).collect(),
+                read_behavior: ReadBehavior::Fail(error),
+            }
+        }
+    }
+
+    impl DiscoverySource for MockDiscovery {
+        fn native_available(&self) -> bool {
+            self.native_available
+        }
+
+        fn list_displays(&self) -> Result<Vec<DiscoveredDisplay>, DiscoveryError> {
+            Ok(self
+                .displays
+                .iter()
+                .map(|id| DiscoveredDisplay {
+                    display_id: id.clone(),
+                })
+                .collect())
+        }
+
+        fn read_input_source(
+            &self,
+            display_id: &str,
+        ) -> Result<InputSourceReading, DiscoveryError> {
+            match &self.read_behavior {
+                ReadBehavior::Fail(error) => Err(error.clone()),
+                ReadBehavior::Reading(reading) => {
+                    if self.displays.iter().any(|d| d == display_id) {
+                        Ok(*reading)
+                    } else {
+                        Err(DiscoveryError::DisplayNotFound {
+                            display_id: display_id.to_string(),
+                        })
+                    }
+                }
+            }
+        }
+    }
+
+    fn app_with_discovery(mock: MockDiscovery) -> Router {
+        router(Arc::new(AppState::with_discovery(
+            Ok(test_config()),
+            Box::new(mock),
+        )))
+    }
+
+    const READING_4626: InputSourceReading = InputSourceReading {
+        current: 4626,
+        maximum: 4626,
+    };
+
+    #[tokio::test]
+    async fn discovery_displays_lists_native_displays() {
+        let app = app_with_discovery(MockDiscovery::available(
+            vec!["K@P:d0e5:0", "KJL:0e25:2"],
+            READING_4626,
+        ));
+
+        let (status, json) = get(&app, "/native-ddc/displays").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["nativeAvailable"], true);
+        assert_eq!(json["displays"][0]["displayId"], "K@P:d0e5:0");
+        assert_eq!(json["displays"][1]["displayId"], "KJL:0e25:2");
+    }
+
+    #[tokio::test]
+    async fn discovery_displays_honest_when_native_unavailable() {
+        let app = app_with_discovery(MockDiscovery::unavailable());
+
+        let (status, json) = get(&app, "/native-ddc/displays").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["nativeAvailable"], false);
+        assert!(json["displays"].as_array().unwrap().is_empty());
+    }
+
+    /// First-run means no config exists — discovery must work anyway (like /events).
+    #[tokio::test]
+    async fn discovery_displays_works_without_config() {
+        let app = router(Arc::new(AppState::with_discovery(
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "deskmux.config.json").into()),
+            Box::new(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626)),
+        )));
+
+        let (status, json) = get(&app, "/native-ddc/displays").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["displays"][0]["displayId"], "K@P:d0e5:0");
+    }
+
+    /// displayIds contain `@` and `:`; the dashboard sends them percent-encoded and axum must
+    /// decode back to the exact id the executor knows.
+    #[tokio::test]
+    async fn discovery_input_source_reads_percent_encoded_display_id() {
+        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+
+        let (status, json) = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/input-source").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["current"], 4626);
+        assert_eq!(json["maximum"], 4626);
+    }
+
+    #[tokio::test]
+    async fn discovery_input_source_unknown_display_is_404_with_code() {
+        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+
+        let (status, json) = get(&app, "/native-ddc/displays/GHOST%3A0000%3A0/input-source").await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json["code"], "displayNotFound");
+        assert!(json["error"].as_str().unwrap().contains("GHOST:0000:0"));
+    }
+
+    #[tokio::test]
+    async fn discovery_input_source_read_failure_is_500_with_code() {
+        let app = app_with_discovery(MockDiscovery::failing_reads(
+            vec!["KJL:0e25:2"],
+            DiscoveryError::VcpReadFailed {
+                detail: "no physical monitor responded; after refresh: still nothing".to_string(),
+            },
+        ));
+
+        let (status, json) = get(&app, "/native-ddc/displays/KJL%3A0e25%3A2/input-source").await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(json["code"], "vcpReadFailed");
+    }
+
+    #[tokio::test]
+    async fn discovery_input_source_unavailable_platform_is_501() {
+        let app = app_with_discovery(MockDiscovery::unavailable());
+
+        let (status, json) = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/input-source").await;
+
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(json["code"], "nativeUnavailable");
     }
 
     async fn get_with_origin(

@@ -1,11 +1,23 @@
 use std::io;
 
+#[cfg(target_os = "windows")]
 use super::backend::{Backend, BackendAction};
+#[cfg(target_os = "windows")]
 use super::runner::CommandOutput;
 
 /// A physical display DeskMux can address for native DDC/CI control.
 pub(super) struct NativeDisplay {
     pub display_id: String,
+}
+
+/// One VCP feature read: the current value and the maximum the monitor reports. Note the
+/// maximum is a single number, not a list of supported values — real hardware reports e.g.
+/// `current=4626, maximum=4626` for input-source. Discovering which value maps to which
+/// physical input is done by switching inputs and re-reading `current`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct VcpReading {
+    pub current: u32,
+    pub maximum: u32,
 }
 
 /// The low-level operations needed to control a monitor's input over DDC/CI, behind a trait so
@@ -14,21 +26,35 @@ pub(super) trait NativeDdcController {
     /// Enumerates currently connected displays this controller can address.
     fn list_displays(&self) -> io::Result<Vec<NativeDisplay>>;
     /// Writes `value` to VCP feature `vcp_code` on the display identified by `display_id`.
+    /// Only called by `NativeDdcBackend` (Windows-gated) — genuinely unused on other platforms
+    /// today, since `executor::discovery` is read-only. Not `#[cfg(target_os = "windows")]` on
+    /// the trait itself so the interface stays uniform for every implementor (including
+    /// discovery's cross-platform test doubles); the allow documents *why* it's silenced rather
+    /// than hiding an actual bug.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     fn set_vcp_feature(&self, display_id: &str, vcp_code: u8, value: u16) -> io::Result<()>;
+    /// Reads VCP feature `vcp_code` from the display identified by `display_id`. A single
+    /// attempt — retry policy lives in `executor::discovery`, not here.
+    fn get_vcp_feature(&self, display_id: &str, vcp_code: u8) -> io::Result<VcpReading>;
 }
 
 /// Runs `BackendAction::NativeDdc` via an injected [`NativeDdcController`] — real Windows calls
-/// in production, a mock in tests.
+/// in production, a mock in tests. Windows-gated because its only production consumer
+/// (`DefaultBackend`'s native arm) is; the trait and types above stay cross-platform for
+/// `executor::discovery` and its tests.
+#[cfg(target_os = "windows")]
 pub(super) struct NativeDdcBackend<C: NativeDdcController> {
     controller: C,
 }
 
+#[cfg(target_os = "windows")]
 impl<C: NativeDdcController> NativeDdcBackend<C> {
     pub(super) fn new(controller: C) -> Self {
         Self { controller }
     }
 }
 
+#[cfg(target_os = "windows")]
 impl<C: NativeDdcController> Backend for NativeDdcBackend<C> {
     fn execute(&self, action: &BackendAction) -> io::Result<CommandOutput> {
         let BackendAction::NativeDdc {
@@ -76,7 +102,7 @@ impl<C: NativeDdcController> Backend for NativeDdcBackend<C> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
     use std::cell::RefCell;
@@ -121,6 +147,10 @@ mod tests {
                 .borrow_mut()
                 .take()
                 .expect("set_vcp_feature called more than once in this test")
+        }
+
+        fn get_vcp_feature(&self, _display_id: &str, _vcp_code: u8) -> io::Result<VcpReading> {
+            unreachable!("NativeDdcBackend never reads; discovery has its own mock")
         }
     }
 

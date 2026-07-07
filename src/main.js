@@ -6,11 +6,21 @@ import { configErrorFromUnknown } from './lib/config-error.js';
 
 import {
 
+  discoveryErrorMessage,
+
+  formatInputSourceReading,
+
+} from './lib/discovery.js';
+
+import {
+
   renderApplyResult,
 
   renderBanner,
 
   renderConfigErrorBanner,
+
+  renderDiscoveryPanel,
 
   renderMonitors,
 
@@ -55,6 +65,10 @@ const els = {
   applyPanel: document.getElementById('apply-panel'),
 
   eventsPanel: document.getElementById('events-panel'),
+
+  discoveryPanel: document.getElementById('discovery-panel'),
+
+  detectBtn: /** @type {HTMLButtonElement} */ (document.getElementById('detect-btn')),
 
   loading: document.getElementById('loading'),
 
@@ -163,6 +177,90 @@ async function loadEvents() {
   } catch {
 
     renderEvents(els.eventsPanel, []);
+
+  }
+
+}
+
+
+
+async function readDisplayInput(displayId, readingEl, buttonEl) {
+
+  if (!client) {
+
+    return;
+
+  }
+
+
+
+  buttonEl.disabled = true;
+
+  readingEl.textContent = 'Reading…';
+
+
+
+  try {
+
+    const reading = await client.fetchInputSource(displayId);
+
+    readingEl.textContent = formatInputSourceReading(reading);
+
+    readingEl.classList.remove('muted');
+
+  } catch (err) {
+
+    readingEl.textContent = discoveryErrorMessage(err);
+
+  } finally {
+
+    buttonEl.disabled = false;
+
+  }
+
+}
+
+
+
+async function detectDisplays() {
+
+  if (!client || !els.discoveryPanel) {
+
+    return;
+
+  }
+
+
+
+  els.detectBtn.disabled = true;
+
+
+
+  try {
+
+    const data = await client.fetchDiscoveryDisplays();
+
+    renderDiscoveryPanel(els.discoveryPanel, data, (displayId, readingEl, buttonEl) => {
+
+      void readDisplayInput(displayId, readingEl, buttonEl);
+
+    });
+
+  } catch (err) {
+
+    els.discoveryPanel.replaceChildren();
+
+    const message = document.createElement('p');
+
+    message.className = 'meta-line muted';
+
+    message.textContent = `Detection failed: ${errorMessage(err)}`;
+
+    els.discoveryPanel.appendChild(message);
+
+  } finally {
+
+    els.detectBtn.disabled = false;
 
   }
 
@@ -353,6 +451,16 @@ async function main() {
   els.applyBtn.addEventListener('click', () => {
 
     void applySelectedPreset();
+
+  });
+
+  // Deliberately outside setControlsDisabled: discovery works without a loaded config —
+
+  // first run is exactly when it matters.
+
+  els.detectBtn.addEventListener('click', () => {
+
+    void detectDisplays();
 
   });
 

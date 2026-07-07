@@ -2,11 +2,8 @@ use std::collections::HashMap;
 
 use super::backend::BackendAction;
 use super::model::{ExecutorError, ResolutionError};
+use super::VCP_INPUT_SOURCE;
 use crate::config::{Config, Input, Monitor};
-
-/// VCP feature code for input-source select — the only capability the config schema exposes
-/// through `nativeDdc` today (see `InputNativeDdc` in config/model.rs).
-const VCP_INPUT_SOURCE: u8 = 0x60;
 
 /// Decides which backend action an input resolves to. Native DDC is only chosen when
 /// `native_available` (the platform can actually run it) and both the monitor's `nativeDdc`

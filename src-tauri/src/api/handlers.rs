@@ -9,6 +9,7 @@ use axum::{
 use crate::config::{Config, LoadError};
 
 use super::apply::{apply_preset_to_state, ApplyPresetStateError};
+use super::discovery::{DiscoverySource, NativeDiscoverySource};
 use super::events::{record_config_error, record_config_loaded, EventLog};
 use super::types::{
     ApplyPresetRequest, ApplyPresetResponse, ErrorResponse, EventsResponse, HealthResponse,
@@ -20,10 +21,20 @@ pub struct AppState {
     pub config_error: Option<String>,
     pub last_applied_preset: Mutex<Option<String>>,
     pub events: Mutex<EventLog>,
+    pub discovery: Box<dyn DiscoverySource>,
 }
 
 impl AppState {
     pub fn from_load_result(result: Result<Config, LoadError>) -> Self {
+        Self::with_discovery(result, Box::new(NativeDiscoverySource))
+    }
+
+    /// Like `from_load_result` but with an injected discovery source, so handler tests are
+    /// deterministic on every platform instead of depending on real display hardware.
+    pub fn with_discovery(
+        result: Result<Config, LoadError>,
+        discovery: Box<dyn DiscoverySource>,
+    ) -> Self {
         let events = Mutex::new(EventLog::new());
         match result {
             Ok(config) => {
@@ -33,6 +44,7 @@ impl AppState {
                     config_error: None,
                     last_applied_preset: Mutex::new(None),
                     events,
+                    discovery,
                 }
             }
             Err(err) => {
@@ -43,6 +55,7 @@ impl AppState {
                     config_error: Some(detail),
                     last_applied_preset: Mutex::new(None),
                     events,
+                    discovery,
                 }
             }
         }

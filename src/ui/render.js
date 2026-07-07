@@ -5,6 +5,7 @@
 /** @typedef {import('../types.js').MonitorOutcome} MonitorOutcome */
 /** @typedef {import('../types.js').PlanningError} PlanningError */
 /** @typedef {import('../types.js').DeskMuxEvent} DeskMuxEvent */
+/** @typedef {import('../types.js').DiscoveryDisplaysResponse} DiscoveryDisplaysResponse */
 
 import {
   eventKindToBadgeClass,
@@ -12,6 +13,12 @@ import {
   formatEventMeta,
   formatEventTimestamp,
 } from '../lib/events.js';
+import {
+  DISCOVERY_EMPTY_MESSAGE,
+  DISCOVERY_INSTRUCTIONS,
+  DISCOVERY_UNAVAILABLE_MESSAGE,
+  formatDisplayLabel,
+} from '../lib/discovery.js';
 import {
   classifyApplyResult,
   summaryBannerText,
@@ -404,6 +411,76 @@ export function renderEvents(container, events) {
 
     list.appendChild(item);
   }
+
+  container.appendChild(list);
+}
+
+/**
+ * Renders the monitor-discovery panel. `onReadInput(displayId, readingEl, buttonEl)` is called
+ * when a display's read button is clicked; the caller owns the fetch and writes the outcome
+ * into `readingEl` (textContent only — never markup).
+ *
+ * @param {HTMLElement} container
+ * @param {DiscoveryDisplaysResponse} data
+ * @param {(displayId: string, readingEl: HTMLElement, buttonEl: HTMLButtonElement) => void} onReadInput
+ */
+export function renderDiscoveryPanel(container, data, onReadInput) {
+  container.replaceChildren();
+
+  if (!data.nativeAvailable) {
+    const message = document.createElement('p');
+    message.className = 'meta-line muted';
+    message.textContent = DISCOVERY_UNAVAILABLE_MESSAGE;
+    container.appendChild(message);
+    return;
+  }
+
+  if (data.displays.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'meta-line muted';
+    empty.textContent = DISCOVERY_EMPTY_MESSAGE;
+    container.appendChild(empty);
+    return;
+  }
+
+  const instructions = document.createElement('p');
+  instructions.className = 'helper';
+  instructions.textContent = DISCOVERY_INSTRUCTIONS;
+  container.appendChild(instructions);
+
+  const list = document.createElement('ul');
+  list.className = 'discovery-list';
+
+  data.displays.forEach((display, index) => {
+    const item = document.createElement('li');
+    item.className = 'discovery-item';
+
+    const header = document.createElement('div');
+    header.className = 'discovery-item-header';
+
+    const label = document.createElement('span');
+    label.className = 'discovery-label';
+    label.textContent = formatDisplayLabel(index, display.displayId);
+    header.appendChild(label);
+
+    const readBtn = document.createElement('button');
+    readBtn.type = 'button';
+    readBtn.className = 'btn btn-secondary btn-small';
+    readBtn.textContent = 'Read current input';
+    header.appendChild(readBtn);
+
+    const reading = document.createElement('p');
+    reading.className = 'discovery-reading meta-line muted';
+    reading.textContent = 'Not read yet.';
+
+    readBtn.addEventListener('click', () => {
+      onReadInput(display.displayId, reading, readBtn);
+    });
+
+    item.appendChild(header);
+    item.appendChild(reading);
+    list.appendChild(item);
+  });
 
   container.appendChild(list);
 }
