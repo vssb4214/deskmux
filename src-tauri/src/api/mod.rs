@@ -40,6 +40,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/native-ddc/displays/{display_id}/input-source",
             get(discovery::read_input_source_handler),
         )
+        .route(
+            "/native-ddc/displays/{display_id}/probe-input",
+            post(discovery::probe_input_handler),
+        )
         .layer(cors::dashboard_cors_layer())
         .with_state(state)
 }
@@ -72,11 +76,19 @@ mod tests {
         native_available: bool,
         displays: Vec<String>,
         read_behavior: ReadBehavior,
+        probe_behavior: ProbeBehavior,
     }
 
     enum ReadBehavior {
         /// Ok with this reading when the display is in `displays`; DisplayNotFound otherwise.
         Reading(InputSourceReading),
+        /// Always this error, regardless of display.
+        Fail(DiscoveryError),
+    }
+
+    enum ProbeBehavior {
+        /// Ok for displays present in `displays`; DisplayNotFound otherwise.
+        Accept { current: Option<u32> },
         /// Always this error, regardless of display.
         Fail(DiscoveryError),
     }
@@ -87,6 +99,7 @@ mod tests {
                 native_available: true,
                 displays: displays.into_iter().map(str::to_string).collect(),
                 read_behavior: ReadBehavior::Reading(reading),
+                probe_behavior: ProbeBehavior::Accept { current: None },
             }
         }
 
@@ -95,6 +108,7 @@ mod tests {
                 native_available: false,
                 displays: Vec::new(),
                 read_behavior: ReadBehavior::Fail(DiscoveryError::NativeUnavailable),
+                probe_behavior: ProbeBehavior::Fail(DiscoveryError::NativeUnavailable),
             }
         }
 
@@ -103,6 +117,25 @@ mod tests {
                 native_available: true,
                 displays: displays.into_iter().map(str::to_string).collect(),
                 read_behavior: ReadBehavior::Fail(error),
+                probe_behavior: ProbeBehavior::Accept { current: None },
+            }
+        }
+
+        fn failing_probe(displays: Vec<&str>, error: DiscoveryError) -> Self {
+            Self {
+                native_available: true,
+                displays: displays.into_iter().map(str::to_string).collect(),
+                read_behavior: ReadBehavior::Reading(READING_4626),
+                probe_behavior: ProbeBehavior::Fail(error),
+            }
+        }
+
+        fn available_with_probe_current(displays: Vec<&str>, current: Option<u32>) -> Self {
+            Self {
+                native_available: true,
+                displays: displays.into_iter().map(str::to_string).collect(),
+                read_behavior: ReadBehavior::Reading(READING_4626),
+                probe_behavior: ProbeBehavior::Accept { current },
             }
         }
     }
@@ -131,6 +164,28 @@ mod tests {
                 ReadBehavior::Reading(reading) => {
                     if self.displays.iter().any(|d| d == display_id) {
                         Ok(*reading)
+                    } else {
+                        Err(DiscoveryError::DisplayNotFound {
+                            display_id: display_id.to_string(),
+                        })
+                    }
+                }
+            }
+        }
+
+        fn probe_input(
+            &self,
+            display_id: &str,
+            _value: u16,
+        ) -> Result<crate::executor::discovery::ProbeInputResult, DiscoveryError> {
+            match &self.probe_behavior {
+                ProbeBehavior::Fail(error) => Err(error.clone()),
+                ProbeBehavior::Accept { current } => {
+                    if self.displays.iter().any(|d| d == display_id) {
+                        Ok(crate::executor::discovery::ProbeInputResult {
+                            accepted: true,
+                            current: *current,
+                        })
                     } else {
                         Err(DiscoveryError::DisplayNotFound {
                             display_id: display_id.to_string(),
@@ -240,6 +295,160 @@ mod tests {
 
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
         assert_eq!(json["code"], "nativeUnavailable");
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_accepts_valid_display_and_value() {
+        let app = app_with_discovery(MockDiscovery::available_with_probe_current(
+            vec!["K@P:d0e5:0"],
+            Some(4626),
+        ));
+
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["accepted"], true);
+        assert_eq!(json["displayId"], "K@P:d0e5:0");
+        assert_eq!(json["value"], 4626);
+        assert_eq!(json["current"], 4626);
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_works_without_config() {
+        let app = router(Arc::new(AppState::with_discovery(
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "deskmux.config.json").into()),
+            Box::new(MockDiscovery::available_with_probe_current(
+                vec!["K@P:d0e5:0"],
+                None,
+            )),
+        )));
+
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["accepted"], true);
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_invalid_json_returns_400() {
+        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":"4626"}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["code"], "badRequest");
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_out_of_range_value_returns_400() {
+        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":70000}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["code"], "badRequest");
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_missing_display_is_404() {
+        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/GHOST%3A0000%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json["code"], "displayNotFound");
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_unavailable_platform_is_501() {
+        let app = app_with_discovery(MockDiscovery::unavailable());
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(json["code"], "nativeUnavailable");
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_write_failure_is_500_with_code() {
+        let app = app_with_discovery(MockDiscovery::failing_probe(
+            vec!["K@P:d0e5:0"],
+            DiscoveryError::VcpWriteFailed {
+                detail: "monitor rejected write".to_string(),
+            },
+        ));
+        let (status, json) = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(json["code"], "vcpWriteFailed");
+    }
+
+    #[tokio::test]
+    async fn discovery_probe_input_records_success_and_failure_events() {
+        let app = app_with_discovery(MockDiscovery::failing_probe(
+            vec!["K@P:d0e5:0"],
+            DiscoveryError::VcpWriteFailed {
+                detail: "monitor rejected write".to_string(),
+            },
+        ));
+        let _ = post_json(
+            &app,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+        let (_, failure_events) = get(&app, "/events").await;
+        assert!(failure_events["events"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Test switch failed"));
+
+        let app_success = app_with_discovery(MockDiscovery::available_with_probe_current(
+            vec!["K@P:d0e5:0"],
+            Some(4626),
+        ));
+        let _ = post_json(
+            &app_success,
+            "/native-ddc/displays/K%40P%3Ad0e5%3A0/probe-input",
+            r#"{"value":4626}"#,
+        )
+        .await;
+        let (_, success_events) = get(&app_success, "/events").await;
+        assert!(success_events["events"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Test switch accepted"));
     }
 
     async fn get_with_origin(
