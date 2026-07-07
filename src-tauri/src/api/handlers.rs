@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 
-use crate::config::{Config, LoadError};
+use crate::config::{format_config_load_error, Config, LoadError};
 
 use super::apply::{apply_preset_to_state, ApplyPresetStateError};
 use super::discovery::{DiscoverySource, NativeDiscoverySource};
@@ -26,12 +26,24 @@ pub struct AppState {
 
 impl AppState {
     pub fn from_load_result(result: Result<Config, LoadError>) -> Self {
-        Self::with_discovery(result, Box::new(NativeDiscoverySource))
+        Self::from_load_result_at(&crate::config::default_config_path(), result)
+    }
+
+    pub fn from_load_result_at(path: &std::path::Path, result: Result<Config, LoadError>) -> Self {
+        Self::with_discovery_at(path, result, Box::new(NativeDiscoverySource))
     }
 
     /// Like `from_load_result` but with an injected discovery source, so handler tests are
     /// deterministic on every platform instead of depending on real display hardware.
     pub fn with_discovery(
+        result: Result<Config, LoadError>,
+        discovery: Box<dyn DiscoverySource>,
+    ) -> Self {
+        Self::with_discovery_at(&crate::config::default_config_path(), result, discovery)
+    }
+
+    pub fn with_discovery_at(
+        path: &std::path::Path,
         result: Result<Config, LoadError>,
         discovery: Box<dyn DiscoverySource>,
     ) -> Self {
@@ -48,7 +60,7 @@ impl AppState {
                 }
             }
             Err(err) => {
-                let detail = err.to_string();
+                let detail = format_config_load_error(path, &err);
                 record_config_error(&events, &detail);
                 Self {
                     config: None,

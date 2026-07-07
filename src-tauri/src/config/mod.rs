@@ -9,4 +9,6 @@ pub use draft::{parse_config_draft, save_config_draft, SaveConfigResult};
 pub use error::{ConfigError, LoadError};
 pub use loader::load_config;
 pub use model::{Config, Input, Monitor, Peer};
-pub use path::default_config_path;
+pub use path::{
+    backup_path_for, default_config_path, format_config_load_error, temp_path_for, CONFIG_FILENAME,
+};
