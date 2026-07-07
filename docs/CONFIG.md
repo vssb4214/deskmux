@@ -194,8 +194,9 @@ DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`
 - `GET /events` — recent activity (see below). Always returns 200, even when config failed to load.
 - `GET /native-ddc/displays` — native DDC display discovery (see below). Works without a loaded config.
 - `GET /native-ddc/displays/{displayId}/input-source` — read the current VCP `0x60` input-source value (see below). Works without a loaded config.
-- `POST /native-ddc/displays/{displayId}/probe-input` — setup-time test switch for one native DDC VCP `0x60` value (see below). Works without a loaded config.
 - `POST /apply-preset` — apply a named preset (see below). Returns the same **503** shape when config did not load.
+
+Setup-time writes (config save, native DDC test switches) are **not** on this HTTP API — they're Tauri IPC commands, invokable only from the bundled desktop app, never from a plain HTTP request. See [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md) for the probe command and [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md) for config save.
 
 ### `GET /health`
 
@@ -260,39 +261,32 @@ hotplug). Discovery never writes to the monitor.
 | 500 | `vcpReadFailed` / `enumerationFailed` | DDC read failed even after refresh / enumeration failed |
 | 501 | `nativeUnavailable` | Not a Windows build |
 
-### `POST /native-ddc/displays/{displayId}/probe-input`
+### `probe_input` (Tauri IPC command, not HTTP)
 
-Setup-time probe write for one native DDC input value (VCP `0x60`).
+Setup-time test switch for one native DDC input value (VCP `0x60`). Deliberately **not** an HTTP
+endpoint — see [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md#security-and-safety) for why.
+Invoked from the dashboard as `invoke('probe_input', { displayId, value })`.
 
-**Request** (`application/json`): `{ "value": 4626 }`
+**Arguments:** `displayId: string`, `value: number` (`u16`).
 
-**Response** (200 on accepted write):
+**Only accepts a `value` that a prior `GET .../input-source` read has already returned as that
+display's current input this session** — enforced inside the command, not just by what the UI
+offers. There is no way to probe a value that hasn't been read first; see
+[NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md#security-and-safety) for the reasoning.
 
-```json
-{
-  "accepted": true,
-  "displayId": "K@P:d0e5:0",
-  "value": 4626,
-  "current": 4626
-}
-```
+**Response on success:** `{ "accepted": true, "displayId": "K@P:d0e5:0", "value": 4626, "current": 4626 }` — `current` is a best-effort read-back after the write and may be omitted if it fails.
 
-`current` is best-effort read-back after the write and may be omitted if read-back fails.
+**Errors** reject the promise with `{ error, code }`:
 
-This endpoint is intentionally narrow:
+| `code` | Meaning |
+|--------|---------|
+| `valueNotObserved` | `value` has not been read as this display's current input this session |
+| `displayNotFound` | `displayId` not in current enumeration |
+| `vcpWriteFailed` | Native DDC write attempt failed |
+| `nativeUnavailable` | Not a Windows build |
 
-- One request = one write attempt (no automatic write retries).
-- Numeric `value` only (`u16` range).
-- No shell command inputs, no arbitrary VCP code inputs, no config required.
-
-Errors use the same `{ error, code }` envelope:
-
-| Status | `code` | Meaning |
-|--------|--------|---------|
-| 400 | `badRequest` | Invalid JSON/value type/out-of-range value |
-| 404 | `displayNotFound` | `displayId` not in current enumeration |
-| 500 | `vcpWriteFailed` | Native DDC write attempt failed |
-| 501 | `nativeUnavailable` | Not a Windows build |
+The dashboard's "Test this input" control (setup checklist) auto-reverts to the pre-probe value
+after a short countdown unless confirmed — see `src/lib/probe.js`.
 
 ### `POST /apply-preset`
 
