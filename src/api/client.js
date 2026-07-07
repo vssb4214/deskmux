@@ -4,7 +4,6 @@
 /** @typedef {import('../types.js').DeskMuxEvent} DeskMuxEvent */
 /** @typedef {import('../types.js').DiscoveryDisplaysResponse} DiscoveryDisplaysResponse */
 /** @typedef {import('../types.js').InputSourceResponse} InputSourceResponse */
-/** @typedef {import('../types.js').ProbeInputResponse} ProbeInputResponse */
 
 import { parseApiError } from '../lib/config-error.js';
 
@@ -56,24 +55,6 @@ export function createApiClient(baseUrl) {
     async fetchInputSource(displayId) {
       return requestJson(
         `/native-ddc/displays/${encodeURIComponent(displayId)}/input-source`,
-      );
-    },
-
-    /**
-     * Setup-time probe write for native DDC VCP 0x60.
-     *
-     * @param {string} displayId
-     * @param {number} value
-     * @returns {Promise<ProbeInputResponse>}
-     */
-    async probeInput(displayId, value) {
-      return requestJson(
-        `/native-ddc/displays/${encodeURIComponent(displayId)}/probe-input`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ value }),
-        },
       );
     },
 

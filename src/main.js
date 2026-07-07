@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from './api/bootstrap.js';
 import { saveConfigDraft, validateConfigDraft } from './api/config-draft.js';
 import { createApiClient } from './api/client.js';
+import { probeInput } from './api/probe.js';
 import { configErrorFromUnknown } from './lib/config-error.js';
 import { defaultConfigDraftSkeleton, draftErrorsFromInvoke } from './lib/config-draft.js';
 import {
@@ -8,6 +9,12 @@ import {
   formatDisplayLabel,
   formatInputSourceReading,
 } from './lib/discovery.js';
+import {
+  formatProbeCountdownMessage,
+  probeErrorMessage,
+  startProbeRevertTimer,
+  PROBE_REVERT_DELAY_MS,
+} from './lib/probe.js';
 import { buildSetupChecklist } from './lib/setup-checklist.js';
 import { buildConfigDraftFromSetupState } from './lib/setup-draft.js';
 import {
@@ -230,6 +237,9 @@ function renderDashboardChrome() {
       onInputLabelChange: (displayId, label) => {
         setupSession = setReadingInputLabel(setupSession, displayId, label);
       },
+      onTestInput: (displayId, value, statusEl, buttonEl) => {
+        void testCapturedInput(displayId, value, statusEl, buttonEl);
+      },
     });
     if (els.deviceNameInput.value !== (setupSession.deviceName ?? '')) {
       els.deviceNameInput.value = setupSession.deviceName ?? '';
@@ -292,6 +302,103 @@ async function readDisplayInput(displayId, label, readingEl, buttonEl) {
   } finally {
     buttonEl.disabled = false;
   }
+}
+
+/**
+ * Tests a captured input value on the real monitor, with auto-revert if the user doesn't
+ * confirm. `value` is always the exact value captured earlier for this display — never
+ * free-text — so this can never ask the backend to write a value it hasn't already gated.
+ *
+ * @param {string} displayId
+ * @param {number} value
+ * @param {HTMLElement} statusEl
+ * @param {HTMLButtonElement} buttonEl
+ */
+async function testCapturedInput(displayId, value, statusEl, buttonEl) {
+  if (!client) {
+    return;
+  }
+
+  buttonEl.disabled = true;
+  statusEl.replaceChildren();
+  const message = document.createElement('p');
+  message.className = 'meta-line muted';
+  message.textContent = 'Reading current input before testing…';
+  statusEl.appendChild(message);
+
+  // Re-read immediately before probing rather than trusting the earlier captured value as
+  // "what's on screen right now" — the user may have switched inputs again since capturing.
+  // This also always leaves us with a legitimately observed revert target.
+  let revertValue;
+  try {
+    const before = await client.fetchInputSource(displayId);
+    revertValue = before.current;
+  } catch (err) {
+    message.textContent = `Could not read current input before testing: ${discoveryErrorMessage(err)}`;
+    buttonEl.disabled = false;
+    return;
+  }
+
+  try {
+    await probeInput(displayId, value);
+  } catch (err) {
+    message.textContent = probeErrorMessage(err);
+    buttonEl.disabled = false;
+    return;
+  }
+
+  statusEl.replaceChildren();
+  const countdownMessage = document.createElement('p');
+  countdownMessage.className = 'meta-line';
+  countdownMessage.textContent = formatProbeCountdownMessage(value);
+  statusEl.appendChild(countdownMessage);
+
+  const controls = document.createElement('div');
+  controls.className = 'probe-test-controls';
+
+  const keepBtn = document.createElement('button');
+  keepBtn.type = 'button';
+  keepBtn.className = 'btn btn-primary btn-small';
+  keepBtn.textContent = 'Keep';
+
+  const revertBtn = document.createElement('button');
+  revertBtn.type = 'button';
+  revertBtn.className = 'btn btn-secondary btn-small';
+  revertBtn.textContent = 'Revert now';
+
+  controls.append(keepBtn, revertBtn);
+  statusEl.appendChild(controls);
+
+  const timer = startProbeRevertTimer({
+    schedule: (fn, delay) => setTimeout(fn, delay),
+    clear: (id) => clearTimeout(/** @type {ReturnType<typeof setTimeout>} */ (id)),
+    delayMs: PROBE_REVERT_DELAY_MS,
+    onRevert: () => {
+      void (async () => {
+        controls.remove();
+        countdownMessage.textContent = 'Reverting…';
+        try {
+          await probeInput(displayId, revertValue);
+          countdownMessage.textContent = 'Reverted to the previous input.';
+        } catch (err) {
+          countdownMessage.textContent = `Revert failed: ${probeErrorMessage(err)}`;
+        } finally {
+          buttonEl.disabled = false;
+        }
+      })();
+    },
+  });
+
+  keepBtn.addEventListener('click', () => {
+    timer.confirm();
+    controls.remove();
+    countdownMessage.textContent = 'Kept — this value is confirmed working.';
+    buttonEl.disabled = false;
+  });
+
+  revertBtn.addEventListener('click', () => {
+    timer.revertNow();
+  });
 }
 
 async function detectDisplays() {

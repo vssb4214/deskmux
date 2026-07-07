@@ -100,6 +100,7 @@ export function renderSetupChecklist(steps, listEl) {
  * @param {{
  *   getMonitorName?: (displayId: string) => string,
  *   onInputLabelChange?: (displayId: string, label: string) => void,
+ *   onTestInput?: (displayId: string, value: number, statusEl: HTMLElement, buttonEl: HTMLButtonElement) => void,
  * } | undefined} [options]
  */
 export function renderCapturedReadings(container, session, options) {
@@ -154,6 +155,26 @@ export function renderCapturedReadings(container, session, options) {
 
       inputField.append(inputLabel, inputControl);
       item.appendChild(inputField);
+    }
+
+    if (options?.onTestInput) {
+      const testRow = document.createElement('div');
+      testRow.className = 'probe-test-row';
+
+      const testBtn = document.createElement('button');
+      testBtn.type = 'button';
+      testBtn.className = 'btn btn-secondary btn-small';
+      testBtn.textContent = 'Test this input';
+
+      const testStatus = document.createElement('div');
+      testStatus.className = 'probe-test-status';
+
+      testBtn.addEventListener('click', () => {
+        options.onTestInput?.(reading.displayId, reading.current, testStatus, testBtn);
+      });
+
+      testRow.append(testBtn, testStatus);
+      item.appendChild(testRow);
     }
 
     list.appendChild(item);
