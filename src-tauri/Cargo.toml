@@ -1,6 +1,6 @@
 [package]
 name = "deskmux"
-version = "0.1.0"
+version = "0.2.0"
 description = "DeskMux: config-driven monitor input switching and preset orchestration"
 edition = "2021"
 
