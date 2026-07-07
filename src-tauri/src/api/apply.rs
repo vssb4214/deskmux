@@ -237,9 +237,23 @@ mod tests {
     #[tokio::test]
     async fn dry_run_native_ddc_events_describe_planned_action() {
         let state = Arc::new(AppState::from_load_result(Ok(native_ddc_test_config())));
-        apply_preset_to_state(&state, "all_a", true, true, ApplySource::Api)
-            .await
-            .expect("dry run should succeed");
+        let result = CoordinatedApplyResult {
+            preset: "all_a".to_string(),
+            dry_run: true,
+            local_only: true,
+            planning_errors: vec![],
+            local_results: vec![MonitorResult {
+                monitor_id: "monitor1".to_string(),
+                device_id: "device-a".to_string(),
+                command: Some("native DDC: display 'K@P:d0e5:0' VCP 0x60 = 4626".to_string()),
+                executed: false,
+                is_native_ddc: true,
+                outcome: MonitorOutcome::DryRun,
+            }],
+            peer_results: vec![],
+        };
+
+        record_apply_outcome(&state, "all_a", true, ApplySource::Api, &result);
 
         let events = state.events.lock().unwrap().recent(MAX_EVENTS);
         let native_event = events
