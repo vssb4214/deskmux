@@ -131,7 +131,7 @@ The owning peer's config carries the real `inputs` and runs the command when the
 
 ## Native DDC/CI input switching (`nativeDdc`)
 
-**Status: foundation only, input switching, Windows only.** An alternative to the shell `command` for switching a monitor's input, talking to the monitor directly over DDC/CI via the Windows Monitor Configuration API instead of shelling out to a tool. Opt-in per input — existing shell-only configs are unaffected, and shell commands remain a permanent fallback for displays that don't support this (see [Limitations](../README.md#limitations)).
+**Status: Windows native DDC foundation.** An alternative to the shell `command` for switching a monitor's input, talking to the monitor directly over DDC/CI via the Windows Monitor Configuration API instead of shelling out to a tool. Opt-in per input — existing shell-only configs are unaffected, and shell commands remain a permanent fallback for displays that don't support this (see [Limitations](../README.md#limitations)). Brightness, contrast, and volume are exposed separately as live controls, not config fields.
 
 ```json
 {
@@ -160,7 +160,7 @@ The owning peer's config carries the real `inputs` and runs the command when the
 
 **`inputs.<deviceId>.nativeDdc.inputSourceValue`** is the monitor-specific VCP input-source value (code `0x60`) that selects this device's input — the same number you'd read off the monitor for a shell-based `command`, just structured instead of embedded in a command string. DeskMux doesn't guess this value any more than it guesses shell commands.
 
-**Values are often larger than 255.** Real monitors report input-source codes like `4626` (DisplayPort) and `4623` (HDMI) — not small sequential integers. Discover yours by reading VCP `0x60` on the target display (DeskMux startup logs list `displayId` values on Windows; reading the current input value in-app is a planned follow-up). Do not copy example numbers unless you've confirmed them on your hardware.
+**Values are often larger than 255.** Real monitors report input-source codes like `4626` (DisplayPort) and `4623` (HDMI) — not small sequential integers. Discover yours by reading VCP `0x60` in the setup checklist or discovery panel for the target display. Do not copy example numbers unless you've confirmed them on your hardware.
 
 **Some monitors do not support input switching over DDC**, or may allow reads but reject writes. DeskMux reports a failed result in those cases — the same as a shell command that exits non-zero — and never silently falls back to the shell `command`.
 
