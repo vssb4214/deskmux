@@ -69,6 +69,29 @@
  * }} DiscoveryDisplaysResponse
  * @typedef {{ current: number, maximum: number }} InputSourceResponse
  * @typedef {{ accepted: boolean, displayId: string, value: number, current?: number }} ProbeInputResponse
+ * @typedef {'brightness' | 'contrast' | 'volume'} NativeDdcControlFeature
+ * @typedef {{
+ *   available: boolean,
+ *   current?: number,
+ *   maximum?: number,
+ *   error?: string
+ * }} NativeDdcControlState
+ * @typedef {{
+ *   brightness: NativeDdcControlState,
+ *   contrast: NativeDdcControlState,
+ *   volume: NativeDdcControlState
+ * }} NativeDdcControls
+ * @typedef {{
+ *   displayId: string,
+ *   controls: NativeDdcControls
+ * }} NativeDdcControlsResponse
+ * @typedef {{
+ *   accepted: boolean,
+ *   displayId: string,
+ *   feature: NativeDdcControlFeature,
+ *   value: number,
+ *   maximum: number
+ * }} SetNativeDdcControlResponse
  * @typedef {'dry-run' | 'planning-failed' | 'success' | 'partial' | 'failed'} ApplySummaryClass
  */
 

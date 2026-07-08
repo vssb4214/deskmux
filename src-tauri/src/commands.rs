@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::api::bind::dashboard_api_base_url;
-use crate::api::discovery::probe_input_gated;
-use crate::api::types::{DiscoveryErrorResponse, ProbeInputResponse};
+use crate::api::discovery::{probe_input_gated, set_native_ddc_control_gated};
+use crate::api::types::{DiscoveryErrorResponse, ProbeInputResponse, SetNativeDdcControlResponse};
 use crate::api::AppState;
 use crate::config::{
     parse_config_draft, save_config_draft as persist_config_draft, LoadError, SaveConfigResult,
@@ -39,6 +39,18 @@ pub fn probe_input(
     state: State<Arc<AppState>>,
 ) -> Result<ProbeInputResponse, DiscoveryErrorResponse> {
     probe_input_gated(&state, &display_id, value)
+}
+
+/// Live native DDC control write for brightness, contrast, and volume. IPC-only: the HTTP API
+/// can read controls, but all hardware writes stay inside Tauri commands.
+#[tauri::command]
+pub fn set_native_ddc_control(
+    display_id: String,
+    feature: String,
+    value: i64,
+    state: State<Arc<AppState>>,
+) -> Result<SetNativeDdcControlResponse, DiscoveryErrorResponse> {
+    set_native_ddc_control_gated(&state, &display_id, &feature, value)
 }
 
 pub fn api_base_url_from_config(config: Option<&crate::config::Config>) -> String {

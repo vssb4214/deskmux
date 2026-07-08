@@ -5,9 +5,13 @@ import {
   DISCOVERY_EMPTY_MESSAGE,
   DISCOVERY_INSTRUCTIONS,
   DISCOVERY_UNAVAILABLE_MESSAGE,
+  NATIVE_DDC_CONTROL_FEATURES,
   discoveryErrorMessage,
   formatDisplayLabel,
   formatInputSourceReading,
+  formatNativeDdcControlValue,
+  nativeDdcControlErrorMessage,
+  nativeDdcControlLabel,
 } from '../src/lib/discovery.js';
 
 test('formatDisplayLabel numbers displays from 1 and shows the raw displayId', () => {
@@ -46,4 +50,34 @@ test('static discovery copy is non-empty and mentions the key concepts', () => {
   assert.ok(DISCOVERY_UNAVAILABLE_MESSAGE.includes('shell command'));
   assert.ok(DISCOVERY_INSTRUCTIONS.includes('read again'));
   assert.ok(DISCOVERY_EMPTY_MESSAGE.includes('DDC'));
+});
+
+test('native DDC control features are the supported live controls only', () => {
+  assert.deepEqual(NATIVE_DDC_CONTROL_FEATURES, ['brightness', 'contrast', 'volume']);
+});
+
+test('nativeDdcControlLabel formats supported feature names', () => {
+  assert.equal(nativeDdcControlLabel('brightness'), 'Brightness');
+  assert.equal(nativeDdcControlLabel('contrast'), 'Contrast');
+  assert.equal(nativeDdcControlLabel('volume'), 'Volume');
+});
+
+test('formatNativeDdcControlValue formats available and unavailable controls', () => {
+  assert.equal(
+    formatNativeDdcControlValue({ available: true, current: 70, maximum: 100 }),
+    'Current 70 of 100',
+  );
+  assert.equal(
+    formatNativeDdcControlValue({ available: false, error: 'vcpReadFailed' }),
+    'Not supported by this monitor',
+  );
+});
+
+test('nativeDdcControlErrorMessage extracts structured backend errors', () => {
+  assert.equal(
+    nativeDdcControlErrorMessage({ error: 'value 101 exceeds maximum 100' }),
+    'value 101 exceeds maximum 100',
+  );
+  assert.equal(nativeDdcControlErrorMessage(new Error('boom')), 'boom');
+  assert.equal(nativeDdcControlErrorMessage(undefined), 'Native DDC control failed.');
 });

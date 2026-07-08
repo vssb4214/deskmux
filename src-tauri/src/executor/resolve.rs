@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::backend::BackendAction;
 use super::model::{ExecutorError, ResolutionError};
-use super::VCP_INPUT_SOURCE;
+use super::NativeDdcFeature;
 use crate::config::{Config, Input, Monitor};
 
 /// Decides which backend action an input resolves to. Native DDC is only chosen when
@@ -20,7 +20,7 @@ fn select_action(
         {
             return Some(BackendAction::NativeDdc {
                 display_id: monitor_native.display_id.clone(),
-                vcp_code: VCP_INPUT_SOURCE,
+                feature: NativeDdcFeature::InputSource,
                 value: input_native.input_source_value,
             });
         }
@@ -370,7 +370,7 @@ mod tests {
                 device_id: "device-a".to_string(),
                 action: BackendAction::NativeDdc {
                     display_id: "K@P:d0e5:0".to_string(),
-                    vcp_code: 0x60,
+                    feature: NativeDdcFeature::InputSource,
                     value: 4626,
                 },
             })]
@@ -391,7 +391,7 @@ mod tests {
                 device_id: "device-a".to_string(),
                 action: BackendAction::NativeDdc {
                     display_id: "DEL4176:0".to_string(),
-                    vcp_code: 0x60,
+                    feature: NativeDdcFeature::InputSource,
                     value: 15,
                 },
             })]

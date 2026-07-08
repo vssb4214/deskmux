@@ -11,10 +11,9 @@
 use std::fmt;
 use std::io;
 
-use super::native::NativeDdcController;
+use super::native::{NativeDdcController, NativeDdcFeature};
 #[cfg(not(target_os = "windows"))]
 use super::native::{NativeDisplay, VcpReading};
-use super::VCP_INPUT_SOURCE;
 
 /// A display found by native enumeration, identified by the same EDID-derived `displayId`
 /// users put in `monitors[].nativeDdc.displayId`.
@@ -28,6 +27,19 @@ pub struct DiscoveredDisplay {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InputSourceReading {
     pub current: u32,
+    pub maximum: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ControlReading {
+    pub current: u32,
+    pub maximum: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ControlWriteResult {
+    pub accepted: bool,
+    pub value: u16,
     pub maximum: u32,
 }
 
@@ -50,6 +62,8 @@ pub enum DiscoveryError {
     VcpReadFailed { detail: String },
     /// The display was found but a single VCP write attempt failed.
     VcpWriteFailed { detail: String },
+    /// The requested write value is outside the feature's supported range.
+    InvalidControlValue { detail: String },
 }
 
 impl DiscoveryError {
@@ -61,6 +75,7 @@ impl DiscoveryError {
             DiscoveryError::DisplayNotFound { .. } => "displayNotFound",
             DiscoveryError::VcpReadFailed { .. } => "vcpReadFailed",
             DiscoveryError::VcpWriteFailed { .. } => "vcpWriteFailed",
+            DiscoveryError::InvalidControlValue { .. } => "invalidControlValue",
         }
     }
 }
@@ -78,10 +93,13 @@ impl fmt::Display for DiscoveryError {
                 write!(f, "display '{display_id}' not found")
             }
             DiscoveryError::VcpReadFailed { detail } => {
-                write!(f, "VCP input-source read failed: {detail}")
+                write!(f, "VCP read failed: {detail}")
             }
             DiscoveryError::VcpWriteFailed { detail } => {
-                write!(f, "VCP input-source write failed: {detail}")
+                write!(f, "VCP write failed: {detail}")
+            }
+            DiscoveryError::InvalidControlValue { detail } => {
+                write!(f, "invalid control value: {detail}")
             }
         }
     }
@@ -111,6 +129,30 @@ pub fn read_input_source(display_id: &str) -> Result<InputSourceReading, Discove
         return Err(DiscoveryError::NativeUnavailable);
     }
     read_input_source_with(controller(), display_id)
+}
+
+/// Reads one live continuous native DDC control. Supported controls in this PR are
+/// brightness, contrast, and volume.
+pub fn read_control(
+    display_id: &str,
+    feature: NativeDdcFeature,
+) -> Result<ControlReading, DiscoveryError> {
+    if !native_available() {
+        return Err(DiscoveryError::NativeUnavailable);
+    }
+    read_control_with(controller(), display_id, feature)
+}
+
+/// Sets one live continuous native DDC control after reading its current value and maximum.
+pub fn set_control(
+    display_id: &str,
+    feature: NativeDdcFeature,
+    value: u16,
+) -> Result<ControlWriteResult, DiscoveryError> {
+    if !native_available() {
+        return Err(DiscoveryError::NativeUnavailable);
+    }
+    set_control_with(controller(), display_id, feature, value)
 }
 
 /// Executes one explicit VCP 0x60 write for setup-time test switching.
@@ -147,14 +189,23 @@ impl NativeDdcController for UnavailableController {
         Ok(Vec::new())
     }
 
-    fn set_vcp_feature(&self, _display_id: &str, _vcp_code: u8, _value: u16) -> io::Result<()> {
+    fn set_vcp_feature(
+        &self,
+        _display_id: &str,
+        _feature: NativeDdcFeature,
+        _value: u16,
+    ) -> io::Result<()> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "native DDC is not available on this platform",
         ))
     }
 
-    fn get_vcp_feature(&self, _display_id: &str, _vcp_code: u8) -> io::Result<VcpReading> {
+    fn get_vcp_feature(
+        &self,
+        _display_id: &str,
+        _feature: NativeDdcFeature,
+    ) -> io::Result<VcpReading> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "native DDC is not available on this platform",
@@ -184,12 +235,12 @@ fn read_input_source_with(
     controller: &dyn NativeDdcController,
     display_id: &str,
 ) -> Result<InputSourceReading, DiscoveryError> {
-    match attempt_read(controller, display_id) {
+    match attempt_read(controller, display_id, NativeDdcFeature::InputSource) {
         Err(DiscoveryError::VcpReadFailed { detail: first }) => {
             // Retry exactly once. The controller re-enumerates per call, so this attempt runs
             // against refreshed display/physical-monitor handles — the fix for the stale-handle
             // failures observed on real hardware after hotplug. Not-found is never retried.
-            match attempt_read(controller, display_id) {
+            match attempt_read(controller, display_id, NativeDdcFeature::InputSource) {
                 Err(DiscoveryError::VcpReadFailed { detail: second }) => {
                     Err(DiscoveryError::VcpReadFailed {
                         detail: format!("{first}; after refresh: {second}"),
@@ -202,13 +253,92 @@ fn read_input_source_with(
     }
 }
 
+fn read_control_with(
+    controller: &dyn NativeDdcController,
+    display_id: &str,
+    feature: NativeDdcFeature,
+) -> Result<ControlReading, DiscoveryError> {
+    if !feature.is_continuous_control() {
+        return Err(DiscoveryError::InvalidControlValue {
+            detail: format!("{} is not a live continuous control", feature.api_name()),
+        });
+    }
+
+    match attempt_read(controller, display_id, feature) {
+        Err(DiscoveryError::VcpReadFailed { detail: first }) => {
+            match attempt_read(controller, display_id, feature) {
+                Err(DiscoveryError::VcpReadFailed { detail: second }) => {
+                    Err(DiscoveryError::VcpReadFailed {
+                        detail: format!("{first}; after refresh: {second}"),
+                    })
+                }
+                other => other.map(|reading| ControlReading {
+                    current: reading.current,
+                    maximum: reading.maximum,
+                }),
+            }
+        }
+        other => other.map(|reading| ControlReading {
+            current: reading.current,
+            maximum: reading.maximum,
+        }),
+    }
+}
+
+fn set_control_with(
+    controller: &dyn NativeDdcController,
+    display_id: &str,
+    feature: NativeDdcFeature,
+    value: u16,
+) -> Result<ControlWriteResult, DiscoveryError> {
+    let reading = read_control_with(controller, display_id, feature)?;
+    if reading.maximum == 0 {
+        return Err(DiscoveryError::InvalidControlValue {
+            detail: format!(
+                "{} reported an unusable maximum of 0 on display '{}'",
+                feature.label(),
+                display_id
+            ),
+        });
+    }
+    if u32::from(value) > reading.maximum {
+        return Err(DiscoveryError::InvalidControlValue {
+            detail: format!(
+                "{} value {value} exceeds monitor-reported maximum {}",
+                feature.label(),
+                reading.maximum
+            ),
+        });
+    }
+
+    controller
+        .set_vcp_feature(display_id, feature, value)
+        .map_err(|e| {
+            if e.kind() == io::ErrorKind::NotFound {
+                DiscoveryError::DisplayNotFound {
+                    display_id: display_id.to_string(),
+                }
+            } else {
+                DiscoveryError::VcpWriteFailed {
+                    detail: e.to_string(),
+                }
+            }
+        })?;
+
+    Ok(ControlWriteResult {
+        accepted: true,
+        value,
+        maximum: reading.maximum,
+    })
+}
+
 fn probe_input_with(
     controller: &dyn NativeDdcController,
     display_id: &str,
     value: u16,
 ) -> Result<ProbeInputResult, DiscoveryError> {
     controller
-        .set_vcp_feature(display_id, VCP_INPUT_SOURCE, value)
+        .set_vcp_feature(display_id, NativeDdcFeature::InputSource, value)
         .map_err(|e| {
             if e.kind() == io::ErrorKind::NotFound {
                 DiscoveryError::DisplayNotFound {
@@ -222,7 +352,7 @@ fn probe_input_with(
         })?;
 
     let current = controller
-        .get_vcp_feature(display_id, VCP_INPUT_SOURCE)
+        .get_vcp_feature(display_id, NativeDdcFeature::InputSource)
         .ok()
         .map(|r| r.current);
 
@@ -235,9 +365,10 @@ fn probe_input_with(
 fn attempt_read(
     controller: &dyn NativeDdcController,
     display_id: &str,
+    feature: NativeDdcFeature,
 ) -> Result<InputSourceReading, DiscoveryError> {
     controller
-        .get_vcp_feature(display_id, VCP_INPUT_SOURCE)
+        .get_vcp_feature(display_id, feature)
         .map(|r| InputSourceReading {
             current: r.current,
             maximum: r.maximum,
@@ -266,9 +397,9 @@ mod tests {
         displays: Vec<String>,
         list_error: Option<String>,
         set_vcp_results: RefCell<VecDeque<io::Result<()>>>,
-        set_vcp_calls: RefCell<usize>,
+        set_vcp_calls: RefCell<Vec<NativeDdcFeature>>,
         get_vcp_results: RefCell<VecDeque<io::Result<VcpReading>>>,
-        get_vcp_calls: RefCell<usize>,
+        get_vcp_calls: RefCell<Vec<NativeDdcFeature>>,
     }
 
     impl ScriptedController {
@@ -281,9 +412,9 @@ mod tests {
                 displays: displays.into_iter().map(str::to_string).collect(),
                 list_error: None,
                 set_vcp_results: RefCell::new(set_vcp_results.into()),
-                set_vcp_calls: RefCell::new(0),
+                set_vcp_calls: RefCell::new(Vec::new()),
                 get_vcp_results: RefCell::new(get_vcp_results.into()),
-                get_vcp_calls: RefCell::new(0),
+                get_vcp_calls: RefCell::new(Vec::new()),
             }
         }
 
@@ -292,18 +423,26 @@ mod tests {
                 displays: Vec::new(),
                 list_error: Some(detail.to_string()),
                 set_vcp_results: RefCell::new(VecDeque::new()),
-                set_vcp_calls: RefCell::new(0),
+                set_vcp_calls: RefCell::new(Vec::new()),
                 get_vcp_results: RefCell::new(VecDeque::new()),
-                get_vcp_calls: RefCell::new(0),
+                get_vcp_calls: RefCell::new(Vec::new()),
             }
         }
 
         fn set_calls(&self) -> usize {
-            *self.set_vcp_calls.borrow()
+            self.set_vcp_calls.borrow().len()
         }
 
         fn calls(&self) -> usize {
-            *self.get_vcp_calls.borrow()
+            self.get_vcp_calls.borrow().len()
+        }
+
+        fn set_features(&self) -> Vec<NativeDdcFeature> {
+            self.set_vcp_calls.borrow().clone()
+        }
+
+        fn get_features(&self) -> Vec<NativeDdcFeature> {
+            self.get_vcp_calls.borrow().clone()
         }
     }
 
@@ -321,18 +460,25 @@ mod tests {
                 .collect())
         }
 
-        fn set_vcp_feature(&self, _display_id: &str, vcp_code: u8, _value: u16) -> io::Result<()> {
-            assert_eq!(vcp_code, VCP_INPUT_SOURCE, "probe only writes VCP 0x60");
-            *self.set_vcp_calls.borrow_mut() += 1;
+        fn set_vcp_feature(
+            &self,
+            _display_id: &str,
+            feature: NativeDdcFeature,
+            _value: u16,
+        ) -> io::Result<()> {
+            self.set_vcp_calls.borrow_mut().push(feature);
             self.set_vcp_results
                 .borrow_mut()
                 .pop_front()
                 .expect("ScriptedController ran out of queued set_vcp results")
         }
 
-        fn get_vcp_feature(&self, _display_id: &str, vcp_code: u8) -> io::Result<VcpReading> {
-            assert_eq!(vcp_code, VCP_INPUT_SOURCE, "discovery only reads VCP 0x60");
-            *self.get_vcp_calls.borrow_mut() += 1;
+        fn get_vcp_feature(
+            &self,
+            _display_id: &str,
+            feature: NativeDdcFeature,
+        ) -> io::Result<VcpReading> {
+            self.get_vcp_calls.borrow_mut().push(feature);
             self.get_vcp_results
                 .borrow_mut()
                 .pop_front()
@@ -353,6 +499,71 @@ mod tests {
 
     fn read_failure(detail: &str) -> io::Result<VcpReading> {
         Err(io::Error::other(detail.to_string()))
+    }
+
+    #[test]
+    fn reads_live_control_on_first_attempt() {
+        let controller =
+            ScriptedController::new(vec!["K@P:d0e5:0"], vec![], vec![reading(70, 100)]);
+
+        let result = read_control_with(&controller, "K@P:d0e5:0", NativeDdcFeature::Brightness)
+            .expect("should read brightness");
+
+        assert_eq!(
+            result,
+            ControlReading {
+                current: 70,
+                maximum: 100
+            }
+        );
+        assert_eq!(
+            controller.get_features(),
+            vec![NativeDdcFeature::Brightness]
+        );
+    }
+
+    #[test]
+    fn set_control_reads_max_before_writing() {
+        let controller =
+            ScriptedController::new(vec!["K@P:d0e5:0"], vec![Ok(())], vec![reading(50, 100)]);
+
+        let result = set_control_with(&controller, "K@P:d0e5:0", NativeDdcFeature::Contrast, 60)
+            .expect("should write contrast");
+
+        assert_eq!(
+            result,
+            ControlWriteResult {
+                accepted: true,
+                value: 60,
+                maximum: 100
+            }
+        );
+        assert_eq!(controller.get_features(), vec![NativeDdcFeature::Contrast]);
+        assert_eq!(controller.set_features(), vec![NativeDdcFeature::Contrast]);
+    }
+
+    #[test]
+    fn set_control_rejects_value_above_reported_max_without_writing() {
+        let controller =
+            ScriptedController::new(vec!["K@P:d0e5:0"], vec![], vec![reading(50, 100)]);
+
+        let err = set_control_with(&controller, "K@P:d0e5:0", NativeDdcFeature::Volume, 101)
+            .expect_err("value above maximum must fail");
+
+        assert_eq!(err.code(), "invalidControlValue");
+        assert_eq!(controller.get_features(), vec![NativeDdcFeature::Volume]);
+        assert!(controller.set_features().is_empty());
+    }
+
+    #[test]
+    fn set_control_rejects_unusable_zero_maximum_without_writing() {
+        let controller = ScriptedController::new(vec!["K@P:d0e5:0"], vec![], vec![reading(0, 0)]);
+
+        let err = set_control_with(&controller, "K@P:d0e5:0", NativeDdcFeature::Brightness, 0)
+            .expect_err("zero maximum is not a usable bound");
+
+        assert_eq!(err.code(), "invalidControlValue");
+        assert!(controller.set_features().is_empty());
     }
 
     #[test]
@@ -539,6 +750,16 @@ mod tests {
         );
         assert_eq!(
             probe_input("K@P:d0e5:0", 4626).expect_err("should be unavailable"),
+            DiscoveryError::NativeUnavailable
+        );
+        assert_eq!(
+            read_control("K@P:d0e5:0", NativeDdcFeature::Brightness)
+                .expect_err("should be unavailable"),
+            DiscoveryError::NativeUnavailable
+        );
+        assert_eq!(
+            set_control("K@P:d0e5:0", NativeDdcFeature::Brightness, 50)
+                .expect_err("should be unavailable"),
             DiscoveryError::NativeUnavailable
         );
     }

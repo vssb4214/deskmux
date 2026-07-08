@@ -4,7 +4,7 @@ A cross-platform desktop control suite for multi-machine, multi-monitor desks �
 
 DeskMux gives you one dashboard to flip your monitors between computers — all screens on your Windows PC, all on your Mac, or any split you define. Today it drives each monitor's input via configured shell commands (temporary adapters to tools like ControlMyMonitor or BetterDisplay); the roadmap is built-in DDC/CI control and smart input handoff. It's config-driven, so it works with whatever monitors you own instead of hardcoding values for mine.
 
-> **Status: MVP / work in progress.** Phase 1 monitor preset switching and LAN orchestration work today. Native DDC, keyboard/mouse sharing, and smart handoff are future goals — not in the box yet. See [Limitations](#limitations).
+> **Status: MVP / work in progress.** Phase 1 monitor preset switching and LAN orchestration work today. Native DDC support is Windows-only and still early; keyboard/mouse sharing and smart handoff are future goals. See [Limitations](#limitations).
 
 ## Why
 
@@ -20,6 +20,7 @@ If you run two machines into the same set of monitors, switching "who's driving 
 - **Execution logs** — every command's stdout/stderr surfaces in the UI so failures are obvious.
 - **Recent events** — a rolling history (config loads, preset applies, native-DDC results) on the dashboard, sourced from `/events`.
 - **Config draft save** — validate and save `deskmux.config.json` from the desktop app (Tauri IPC; restart required to apply).
+- **Windows native DDC helpers** — discover displays, capture input-source values, and adjust live brightness, contrast, or volume where the monitor supports it.
 
 ## Requirements
 
@@ -76,7 +77,7 @@ npm run tauri dev
   - *Software sharing* (control another machine's pointer over the network, with the keyboard following the active machine) is on the roadmap as built-in DeskMux functionality where feasible — not implemented yet.
   - *True USB handoff* — making your physically-plugged-in keyboard belong to a different computer — cannot be done in software by anyone. USB is host-to-device; two computers are both hosts, so a bare USB (or USB-C) cable between them does nothing. Re-routing the physical device requires a hardware USB switch/KVM. This is a law of the protocol, not a DeskMux shortcoming.
   - Software input sharing is not zero-latency; macOS blocks injection at the login screen.
-- **External monitor tools are temporary adapters.** Phase 1 shells out to tools like ControlMyMonitor / ddcutil / BetterDisplay / Lunar. The long-term goal is native DDC/CI built into DeskMux so those tools are optional, not required — for monitors that expose the relevant controls. Some displays will always need the shell-command fallback.
+- **External monitor tools are temporary adapters.** Phase 1 shells out to tools like ControlMyMonitor / ddcutil / BetterDisplay / Lunar. Native DDC/CI support is beginning on Windows so those tools can become optional on supported displays, but some displays will always need the shell-command fallback.
 - **Research-grade.** This is an MVP. Expect rough edges.
 
 ## Roadmap

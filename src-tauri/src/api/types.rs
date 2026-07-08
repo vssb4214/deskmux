@@ -96,6 +96,43 @@ pub struct InputSourceResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NativeDdcControlsResponse {
+    pub display_id: String,
+    pub controls: NativeDdcControls,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDdcControls {
+    pub brightness: NativeDdcControlState,
+    pub contrast: NativeDdcControlState,
+    pub volume: NativeDdcControlState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDdcControlState {
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub maximum: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetNativeDdcControlResponse {
+    pub accepted: bool,
+    pub display_id: String,
+    pub feature: String,
+    pub value: u16,
+    pub maximum: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProbeInputResponse {
     pub accepted: bool,
     pub display_id: String,

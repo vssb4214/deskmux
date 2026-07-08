@@ -4,6 +4,7 @@
 /** @typedef {import('../types.js').DeskMuxEvent} DeskMuxEvent */
 /** @typedef {import('../types.js').DiscoveryDisplaysResponse} DiscoveryDisplaysResponse */
 /** @typedef {import('../types.js').InputSourceResponse} InputSourceResponse */
+/** @typedef {import('../types.js').NativeDdcControlsResponse} NativeDdcControlsResponse */
 
 import { parseApiError } from '../lib/config-error.js';
 
@@ -55,6 +56,16 @@ export function createApiClient(baseUrl) {
     async fetchInputSource(displayId) {
       return requestJson(
         `/native-ddc/displays/${encodeURIComponent(displayId)}/input-source`,
+      );
+    },
+
+    /**
+     * @param {string} displayId
+     * @returns {Promise<NativeDdcControlsResponse>}
+     */
+    async fetchNativeDdcControls(displayId) {
+      return requestJson(
+        `/native-ddc/displays/${encodeURIComponent(displayId)}/controls`,
       );
     },
 

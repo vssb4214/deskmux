@@ -40,6 +40,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/native-ddc/displays/{display_id}/input-source",
             get(discovery::read_input_source_handler),
         )
+        .route(
+            "/native-ddc/displays/{display_id}/controls",
+            get(discovery::read_controls_handler),
+        )
         // Probe (test-switch) writes are intentionally NOT exposed over HTTP — see
         // api/discovery.rs's module comment. Reachable only via the Tauri `probe_input`
         // command (commands.rs).
@@ -56,7 +60,10 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::config::Config;
-    use crate::executor::discovery::{DiscoveredDisplay, DiscoveryError, InputSourceReading};
+    use crate::executor::discovery::{
+        ControlReading, ControlWriteResult, DiscoveredDisplay, DiscoveryError, InputSourceReading,
+    };
+    use crate::executor::NativeDdcFeature;
     use discovery::DiscoverySource;
 
     fn app_with_config() -> Router {
@@ -163,6 +170,52 @@ mod tests {
                 ReadBehavior::Reading(reading) => {
                     if self.displays.iter().any(|d| d == display_id) {
                         Ok(*reading)
+                    } else {
+                        Err(DiscoveryError::DisplayNotFound {
+                            display_id: display_id.to_string(),
+                        })
+                    }
+                }
+            }
+        }
+
+        fn read_control(
+            &self,
+            display_id: &str,
+            _feature: NativeDdcFeature,
+        ) -> Result<ControlReading, DiscoveryError> {
+            match &self.read_behavior {
+                ReadBehavior::Fail(error) => Err(error.clone()),
+                ReadBehavior::Reading(reading) => {
+                    if self.displays.iter().any(|d| d == display_id) {
+                        Ok(ControlReading {
+                            current: reading.current,
+                            maximum: reading.maximum,
+                        })
+                    } else {
+                        Err(DiscoveryError::DisplayNotFound {
+                            display_id: display_id.to_string(),
+                        })
+                    }
+                }
+            }
+        }
+
+        fn set_control(
+            &self,
+            display_id: &str,
+            _feature: NativeDdcFeature,
+            value: u16,
+        ) -> Result<ControlWriteResult, DiscoveryError> {
+            match &self.probe_behavior {
+                ProbeBehavior::Fail(error) => Err(error.clone()),
+                ProbeBehavior::Accept { .. } => {
+                    if self.displays.iter().any(|d| d == display_id) {
+                        Ok(ControlWriteResult {
+                            accepted: true,
+                            value,
+                            maximum: 100,
+                        })
                     } else {
                         Err(DiscoveryError::DisplayNotFound {
                             display_id: display_id.to_string(),
@@ -295,6 +348,90 @@ mod tests {
 
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
         assert_eq!(json["code"], "nativeUnavailable");
+    }
+
+    #[tokio::test]
+    async fn discovery_controls_reads_supported_controls() {
+        let app = app_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+
+        let (status, json) = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/controls").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["displayId"], "K@P:d0e5:0");
+        assert_eq!(json["controls"]["brightness"]["available"], true);
+        assert_eq!(json["controls"]["brightness"]["current"], 4626);
+        assert_eq!(json["controls"]["contrast"]["maximum"], 4626);
+        assert_eq!(json["controls"]["volume"]["available"], true);
+    }
+
+    #[tokio::test]
+    async fn discovery_controls_marks_unavailable_controls_without_failing_whole_request() {
+        let app = app_with_discovery(MockDiscovery::failing_reads(
+            vec!["K@P:d0e5:0"],
+            DiscoveryError::VcpReadFailed {
+                detail: "unsupported".to_string(),
+            },
+        ));
+
+        let (status, json) = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/controls").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["controls"]["brightness"]["available"], false);
+        assert_eq!(json["controls"]["brightness"]["error"], "vcpReadFailed");
+        assert_eq!(json["controls"]["volume"]["available"], false);
+    }
+
+    #[tokio::test]
+    async fn discovery_controls_are_honest_when_native_unavailable() {
+        let app = app_with_discovery(MockDiscovery::unavailable());
+
+        let (status, json) = get(&app, "/native-ddc/displays/K%40P%3Ad0e5%3A0/controls").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["controls"]["brightness"]["available"], false);
+        assert_eq!(json["controls"]["brightness"]["error"], "nativeUnavailable");
+    }
+
+    #[test]
+    fn set_native_ddc_control_rejects_unsupported_feature() {
+        let state =
+            state_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+
+        let err = discovery::set_native_ddc_control_gated(&state, "K@P:d0e5:0", "inputSource", 50)
+            .expect_err("input-source is not a live control write");
+
+        assert_eq!(err.code, "unsupportedFeature");
+    }
+
+    #[test]
+    fn set_native_ddc_control_rejects_out_of_range_value() {
+        let state =
+            state_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+
+        let err = discovery::set_native_ddc_control_gated(
+            &state,
+            "K@P:d0e5:0",
+            "brightness",
+            i64::from(u16::MAX) + 1,
+        )
+        .expect_err("value above u16 must fail");
+
+        assert_eq!(err.code, "invalidControlValue");
+    }
+
+    #[test]
+    fn set_native_ddc_control_accepts_named_control() {
+        let state =
+            state_with_discovery(MockDiscovery::available(vec!["K@P:d0e5:0"], READING_4626));
+
+        let result =
+            discovery::set_native_ddc_control_gated(&state, "K@P:d0e5:0", "brightness", 70)
+                .expect("supported feature should write");
+
+        assert!(result.accepted);
+        assert_eq!(result.feature, "brightness");
+        assert_eq!(result.value, 70);
+        assert_eq!(result.maximum, 100);
     }
 
     /// A read is the only thing that can ever authorize a probe — this is the fact the whole

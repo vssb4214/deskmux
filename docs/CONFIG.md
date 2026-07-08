@@ -164,7 +164,7 @@ The owning peer's config carries the real `inputs` and runs the command when the
 
 **Some monitors do not support input switching over DDC**, or may allow reads but reject writes. DeskMux reports a failed result in those cases — the same as a shell command that exits non-zero — and never silently falls back to the shell `command`.
 
-**This is input-source switching only.** There's deliberately no field for an arbitrary VCP code — brightness, contrast, volume, and power are separate future capabilities with their own config fields when they're built, not something you can reach through `nativeDdc` today.
+**This config shape is input-source switching only.** There's deliberately no field for an arbitrary VCP code. Brightness, contrast, and volume are available as live desktop controls where the monitor supports them, not as preset/config values. Power control is intentionally separate future work.
 
 **Platform behavior:** if an input sets `nativeDdc` but this build can't run it (non-Windows, for now), DeskMux falls back to that input's `command` if one is set, or reports a clear resolution error if not. A native operation that runs but fails (display not found, monitor rejects the write) is reported as a failed result, the same as a shell command that exits non-zero — it never silently falls back to the shell command.
 
@@ -194,9 +194,10 @@ DeskMux serves a small HTTP API on this machine (default `http://127.0.0.1:3737`
 - `GET /events` — recent activity (see below). Always returns 200, even when config failed to load.
 - `GET /native-ddc/displays` — native DDC display discovery (see below). Works without a loaded config.
 - `GET /native-ddc/displays/{displayId}/input-source` — read the current VCP `0x60` input-source value (see below). Works without a loaded config.
+- `GET /native-ddc/displays/{displayId}/controls` — read live brightness, contrast, and volume controls for one display (see below). Works without a loaded config.
 - `POST /apply-preset` — apply a named preset (see below). Returns the same **503** shape when config did not load.
 
-Setup-time writes (config save, native DDC test switches) are **not** on this HTTP API — they're Tauri IPC commands, invokable only from the bundled desktop app, never from a plain HTTP request. See [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md) for the probe command and [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md) for config save.
+Setup-time and hardware writes (config save, native DDC test switches, live native DDC control writes) are **not** on this HTTP API — they're Tauri IPC commands, invokable only from the bundled desktop app, never from a plain HTTP request. See [NATIVE_DDC_DISCOVERY.md](./NATIVE_DDC_DISCOVERY.md) for native DDC commands and [FIRST_RUN_SETUP.md](./FIRST_RUN_SETUP.md) for config save.
 
 ### `GET /health`
 
@@ -260,6 +261,36 @@ hotplug). Discovery never writes to the monitor.
 | 404 | `displayNotFound` | `displayId` not in the current enumeration |
 | 500 | `vcpReadFailed` / `enumerationFailed` | DDC read failed even after refresh / enumeration failed |
 | 501 | `nativeUnavailable` | Not a Windows build |
+
+### `GET /native-ddc/displays/{displayId}/controls`
+
+Reads live continuous native DDC controls for one display: brightness (`0x10`), contrast (`0x12`),
+and volume (`0x62`). This is for immediate adjustment only; it does not add config or preset
+fields. Unsupported controls are returned individually as unavailable so one missing feature does
+not hide the others.
+
+**Response** (200):
+
+```json
+{
+  "displayId": "K@P:d0e5:0",
+  "controls": {
+    "brightness": { "available": true, "current": 70, "maximum": 100 },
+    "contrast": { "available": true, "current": 50, "maximum": 100 },
+    "volume": { "available": false, "error": "vcpReadFailed" }
+  }
+}
+```
+
+Writes use the desktop-only `set_native_ddc_control` IPC command:
+
+```js
+invoke('set_native_ddc_control', { displayId, feature: 'brightness', value: 70 })
+```
+
+Only `brightness`, `contrast`, and `volume` are accepted feature names. DeskMux reads the monitor's
+current value and maximum before writing, rejects values above the monitor-reported maximum, and
+does not accept arbitrary VCP codes. Power control (`0xD6`) is intentionally not included here.
 
 ### `probe_input` (Tauri IPC command, not HTTP)
 

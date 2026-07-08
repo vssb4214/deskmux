@@ -1,18 +1,16 @@
 use std::io;
 
+use super::native::NativeDdcFeature;
 use super::runner::{CommandOutput, CommandRunner};
 
 /// What a resolved layout entry should do to switch an input.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum BackendAction {
     Shell(String),
-    /// Write `value` to VCP feature `vcp_code` on the display identified by `display_id`.
-    /// Generically VCP-shaped at this layer since the underlying call is the same for any VCP
-    /// code — but the *config* schema only ever produces `vcp_code: 0x60` (input-source) today;
-    /// see `InputNativeDdc` in config/model.rs for that boundary.
+    /// Write `value` to a named native DDC feature on the display identified by `display_id`.
     NativeDdc {
         display_id: String,
-        vcp_code: u8,
+        feature: NativeDdcFeature,
         value: u16,
     },
 }
@@ -25,9 +23,12 @@ impl BackendAction {
             BackendAction::Shell(command) => command.clone(),
             BackendAction::NativeDdc {
                 display_id,
-                vcp_code,
+                feature,
                 value,
-            } => format!("native DDC: display '{display_id}' VCP 0x{vcp_code:02x} = {value}"),
+            } => format!(
+                "native DDC: display '{display_id}' {} = {value}",
+                feature.label()
+            ),
         }
     }
 

@@ -1,4 +1,6 @@
 /** @typedef {import('../types.js').InputSourceResponse} InputSourceResponse */
+/** @typedef {import('../types.js').NativeDdcControlFeature} NativeDdcControlFeature */
+/** @typedef {import('../types.js').NativeDdcControlState} NativeDdcControlState */
 
 export const DISCOVERY_UNAVAILABLE_MESSAGE =
   'Native display detection is Windows-only. On this platform, configure monitors with ' +
@@ -28,6 +30,51 @@ export function formatDisplayLabel(index, displayId) {
  */
 export function formatInputSourceReading(reading) {
   return `Current input value: ${reading.current} (reported max ${reading.maximum})`;
+}
+
+/** @type {NativeDdcControlFeature[]} */
+export const NATIVE_DDC_CONTROL_FEATURES = ['brightness', 'contrast', 'volume'];
+
+/** @param {NativeDdcControlFeature} feature */
+export function nativeDdcControlLabel(feature) {
+  switch (feature) {
+    case 'brightness':
+      return 'Brightness';
+    case 'contrast':
+      return 'Contrast';
+    case 'volume':
+      return 'Volume';
+    default:
+      return 'Control';
+  }
+}
+
+/**
+ * @param {NativeDdcControlState} control
+ * @returns {string}
+ */
+export function formatNativeDdcControlValue(control) {
+  if (!control.available) {
+    return 'Not supported by this monitor';
+  }
+  return `Current ${control.current} of ${control.maximum}`;
+}
+
+/**
+ * @param {unknown} err
+ * @returns {string}
+ */
+export function nativeDdcControlErrorMessage(err) {
+  if (err && typeof err === 'object' && 'error' in err) {
+    const message = /** @type {{ error?: unknown }} */ (err).error;
+    if (typeof message === 'string' && message) {
+      return message;
+    }
+  }
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return 'Native DDC control failed.';
 }
 
 /**
