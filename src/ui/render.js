@@ -17,7 +17,10 @@ import {
   DISCOVERY_EMPTY_MESSAGE,
   DISCOVERY_INSTRUCTIONS,
   DISCOVERY_UNAVAILABLE_MESSAGE,
+  NATIVE_DDC_CONTROL_FEATURES,
   formatDisplayLabel,
+  formatNativeDdcControlValue,
+  nativeDdcControlLabel,
 } from '../lib/discovery.js';
 import {
   classifyApplyResult,
@@ -526,6 +529,147 @@ export function renderDiscoveryPanel(container, data, onReadInput, naming) {
   });
 
   container.appendChild(list);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {DiscoveryDisplaysResponse} data
+ * @param {(displayId: string, bodyEl: HTMLElement, buttonEl: HTMLButtonElement) => void} onLoadControls
+ */
+export function renderNativeDdcControlDisplays(container, data, onLoadControls) {
+  container.replaceChildren();
+
+  if (!data.nativeAvailable) {
+    const message = document.createElement('p');
+    message.className = 'meta-line muted';
+    message.textContent = 'Native DDC controls are available on Windows only.';
+    container.appendChild(message);
+    return;
+  }
+
+  if (data.displays.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'meta-line muted';
+    empty.textContent = DISCOVERY_EMPTY_MESSAGE;
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'discovery-list native-controls-list';
+
+  data.displays.forEach((display, index) => {
+    const item = document.createElement('li');
+    item.className = 'discovery-item';
+
+    const header = document.createElement('div');
+    header.className = 'discovery-item-header';
+
+    const label = document.createElement('span');
+    label.className = 'discovery-label';
+    label.textContent = formatDisplayLabel(index, display.displayId);
+
+    const loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.className = 'btn btn-secondary btn-small';
+    loadBtn.textContent = 'Load controls';
+
+    header.append(label, loadBtn);
+
+    const body = document.createElement('div');
+    body.className = 'native-controls-body';
+    const placeholder = document.createElement('p');
+    placeholder.className = 'meta-line muted';
+    placeholder.textContent = 'Controls not loaded.';
+    body.appendChild(placeholder);
+
+    loadBtn.addEventListener('click', () => {
+      onLoadControls(display.displayId, body, loadBtn);
+    });
+
+    item.append(header, body);
+    list.appendChild(item);
+  });
+
+  container.appendChild(list);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {import('../types.js').NativeDdcControlsResponse} data
+ * @param {{
+ *   canWrite: boolean,
+ *   onApply: (feature: import('../types.js').NativeDdcControlFeature, value: number, statusEl: HTMLElement, buttonEl: HTMLButtonElement) => void,
+ * }} actions
+ */
+export function renderNativeDdcControls(container, data, actions) {
+  container.replaceChildren();
+
+  const rows = document.createElement('div');
+  rows.className = 'native-control-rows';
+
+  for (const feature of NATIVE_DDC_CONTROL_FEATURES) {
+    const control = data.controls[feature];
+    const row = document.createElement('div');
+    row.className = 'native-control-row';
+
+    const title = document.createElement('strong');
+    title.textContent = nativeDdcControlLabel(feature);
+
+    const valueText = document.createElement('p');
+    valueText.className = control.available ? 'meta-line' : 'meta-line muted';
+    valueText.textContent = formatNativeDdcControlValue(control);
+
+    row.append(title, valueText);
+
+    if (control.available && control.maximum != null && control.current != null) {
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0';
+      input.max = String(control.maximum);
+      input.value = String(control.current);
+      input.className = 'native-control-slider';
+
+      const number = document.createElement('input');
+      number.type = 'number';
+      number.min = '0';
+      number.max = String(control.maximum);
+      number.value = String(control.current);
+      number.className = 'native-control-number';
+
+      input.addEventListener('input', () => {
+        number.value = input.value;
+      });
+      number.addEventListener('input', () => {
+        input.value = number.value;
+      });
+
+      const applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'btn btn-primary btn-small';
+      applyBtn.textContent = 'Apply';
+      applyBtn.disabled = !actions.canWrite;
+
+      const status = document.createElement('p');
+      status.className = 'native-control-status meta-line muted';
+      status.textContent = actions.canWrite
+        ? 'Apply writes this value to the monitor.'
+        : 'Open the desktop app to write this control.';
+
+      applyBtn.addEventListener('click', () => {
+        actions.onApply(feature, Number(number.value), status, applyBtn);
+      });
+
+      const controls = document.createElement('div');
+      controls.className = 'native-control-inputs';
+      controls.append(input, number, applyBtn);
+      row.append(controls, status);
+    }
+
+    rows.appendChild(row);
+  }
+
+  container.appendChild(rows);
 }
 
 /**

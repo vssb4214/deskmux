@@ -540,6 +540,53 @@ summary:focus-visible {
   margin-top: 0.5rem;
 }
 
+.native-controls-panel {
+  margin-top: 0.75rem;
+}
+
+.native-controls-body {
+  margin-top: 0.5rem;
+}
+
+.native-control-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.native-control-row {
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.native-control-row:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.native-control-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5rem auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.native-control-slider {
+  width: 100%;
+}
+
+.native-control-number {
+  width: 100%;
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.native-control-status {
+  margin-top: 0.4rem;
+}
+
 .setup-draft-summary-list {
   margin: 0.5rem 0 0;
   padding-left: 1.25rem;
@@ -641,6 +688,16 @@ summary:focus-visible {
 
   .probe-test-row {
     border-color: #444;
+  }
+
+  .native-control-row {
+    border-color: #444;
+  }
+
+  .native-control-number {
+    background: #1f1f1f;
+    color: inherit;
+    border-color: #555;
   }
 
   .setup-checklist-item {

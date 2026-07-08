@@ -24,7 +24,7 @@ use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW,
 };
 
-use super::native::{NativeDdcController, NativeDisplay, VcpReading};
+use super::native::{NativeDdcController, NativeDdcFeature, NativeDisplay, VcpReading};
 
 pub(super) struct WindowsDdcController;
 
@@ -42,16 +42,27 @@ impl NativeDdcController for WindowsDdcController {
             .map_err(to_io_error)
     }
 
-    fn set_vcp_feature(&self, display_id: &str, vcp_code: u8, value: u16) -> io::Result<()> {
+    fn set_vcp_feature(
+        &self,
+        display_id: &str,
+        feature: NativeDdcFeature,
+        value: u16,
+    ) -> io::Result<()> {
         let target = find_display(display_id)?;
+        let vcp_code = vcp_code(feature);
         with_physical_monitor(target.gdi_device_name, |handle| {
             (unsafe { SetVCPFeature(handle, vcp_code, u32::from(value)) } != 0).then_some(())
         })
         .map_err(to_io_error)
     }
 
-    fn get_vcp_feature(&self, display_id: &str, vcp_code: u8) -> io::Result<VcpReading> {
+    fn get_vcp_feature(
+        &self,
+        display_id: &str,
+        feature: NativeDdcFeature,
+    ) -> io::Result<VcpReading> {
         let target = find_display(display_id)?;
+        let vcp_code = vcp_code(feature);
         with_physical_monitor(target.gdi_device_name, |handle| {
             let mut current = 0u32;
             let mut maximum = 0u32;
@@ -67,6 +78,15 @@ impl NativeDdcController for WindowsDdcController {
             (ok != 0).then_some(VcpReading { current, maximum })
         })
         .map_err(to_io_error)
+    }
+}
+
+fn vcp_code(feature: NativeDdcFeature) -> u8 {
+    match feature {
+        NativeDdcFeature::Brightness => 0x10,
+        NativeDdcFeature::Contrast => 0x12,
+        NativeDdcFeature::InputSource => 0x60,
+        NativeDdcFeature::Volume => 0x62,
     }
 }
 
@@ -267,4 +287,17 @@ where
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_named_features_to_vcp_codes() {
+        assert_eq!(vcp_code(NativeDdcFeature::Brightness), 0x10);
+        assert_eq!(vcp_code(NativeDdcFeature::Contrast), 0x12);
+        assert_eq!(vcp_code(NativeDdcFeature::InputSource), 0x60);
+        assert_eq!(vcp_code(NativeDdcFeature::Volume), 0x62);
+    }
 }

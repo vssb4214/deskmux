@@ -34,6 +34,7 @@ pub fn run() {
             commands::validate_config_draft,
             commands::save_config_draft,
             commands::probe_input,
+            commands::set_native_ddc_control,
         ])
         .setup(|app| {
             let config_path = config::default_config_path();

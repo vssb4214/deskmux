@@ -11,6 +11,29 @@ parsing and the full onboarding wizard are still pending. This document captures
 real-hardware validation proved and how DeskMux exposes discovery without a separate diagnostic
 session.
 
+## Live controls
+
+DeskMux also exposes live native DDC controls for brightness (`0x10`), contrast (`0x12`), and
+volume (`0x62`) on displays that support them. Reads are available over HTTP:
+
+```text
+GET /native-ddc/displays/{displayId}/controls
+```
+
+The response reports each control independently. A monitor may support brightness but not volume;
+unsupported controls are shown as unavailable rather than treated as a whole-request failure when
+possible. These controls are live adjustments only in this PR: they are not config fields, preset
+steps, or unattended automation.
+
+Writes are desktop-app-only through the Tauri `set_native_ddc_control` IPC command. The command
+accepts only named features (`brightness`, `contrast`, `volume`), reads the feature first, treats
+the monitor-reported maximum as the semantic ceiling for these continuous controls, and rejects
+values outside `0..=maximum`. It does not accept arbitrary VCP codes.
+
+Power mode (`0xD6`) is intentionally not included. A DDC power-off can leave a monitor in a state
+that may not wake over DDC, so power needs a separate guarded design with stronger confirmation
+and honest wake-back copy.
+
 ## Problem
 
 Native DDC input switching works on supported Windows displays, but users must currently supply two opaque values per monitor:

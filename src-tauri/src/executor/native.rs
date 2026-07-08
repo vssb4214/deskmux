@@ -10,6 +10,51 @@ pub(super) struct NativeDisplay {
     pub display_id: String,
 }
 
+/// Native DDC features DeskMux knows how to address. This is deliberately bounded: callers
+/// choose a named feature, never a raw VCP code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeDdcFeature {
+    InputSource,
+    Brightness,
+    Contrast,
+    Volume,
+}
+
+impl NativeDdcFeature {
+    pub fn label(self) -> &'static str {
+        match self {
+            NativeDdcFeature::InputSource => "input source",
+            NativeDdcFeature::Brightness => "brightness",
+            NativeDdcFeature::Contrast => "contrast",
+            NativeDdcFeature::Volume => "volume",
+        }
+    }
+
+    pub fn api_name(self) -> &'static str {
+        match self {
+            NativeDdcFeature::InputSource => "inputSource",
+            NativeDdcFeature::Brightness => "brightness",
+            NativeDdcFeature::Contrast => "contrast",
+            NativeDdcFeature::Volume => "volume",
+        }
+    }
+
+    pub fn continuous_controls() -> [NativeDdcFeature; 3] {
+        [
+            NativeDdcFeature::Brightness,
+            NativeDdcFeature::Contrast,
+            NativeDdcFeature::Volume,
+        ]
+    }
+
+    pub fn is_continuous_control(self) -> bool {
+        matches!(
+            self,
+            NativeDdcFeature::Brightness | NativeDdcFeature::Contrast | NativeDdcFeature::Volume
+        )
+    }
+}
+
 /// One VCP feature read: the current value and the maximum the monitor reports. Note the
 /// maximum is a single number, not a list of supported values — real hardware reports e.g.
 /// `current=4626, maximum=4626` for input-source. Discovering which value maps to which
@@ -32,10 +77,19 @@ pub(super) trait NativeDdcController {
     /// discovery's cross-platform test doubles); the allow documents *why* it's silenced rather
     /// than hiding an actual bug.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-    fn set_vcp_feature(&self, display_id: &str, vcp_code: u8, value: u16) -> io::Result<()>;
+    fn set_vcp_feature(
+        &self,
+        display_id: &str,
+        feature: NativeDdcFeature,
+        value: u16,
+    ) -> io::Result<()>;
     /// Reads VCP feature `vcp_code` from the display identified by `display_id`. A single
     /// attempt — retry policy lives in `executor::discovery`, not here.
-    fn get_vcp_feature(&self, display_id: &str, vcp_code: u8) -> io::Result<VcpReading>;
+    fn get_vcp_feature(
+        &self,
+        display_id: &str,
+        feature: NativeDdcFeature,
+    ) -> io::Result<VcpReading>;
 }
 
 /// Runs `BackendAction::NativeDdc` via an injected [`NativeDdcController`] — real Windows calls
@@ -59,7 +113,7 @@ impl<C: NativeDdcController> Backend for NativeDdcBackend<C> {
     fn execute(&self, action: &BackendAction) -> io::Result<CommandOutput> {
         let BackendAction::NativeDdc {
             display_id,
-            vcp_code,
+            feature,
             value,
         } = action
         else {
@@ -84,12 +138,15 @@ impl<C: NativeDdcController> Backend for NativeDdcBackend<C> {
         // - it ran, it just didn't succeed.
         match self
             .controller
-            .set_vcp_feature(display_id, *vcp_code, *value)
+            .set_vcp_feature(display_id, *feature, *value)
         {
             Ok(()) => Ok(CommandOutput {
                 success: true,
                 exit_code: None,
-                stdout: format!("set VCP 0x{vcp_code:02x} = {value} on display '{display_id}'"),
+                stdout: format!(
+                    "set native DDC {} = {value} on display '{display_id}'",
+                    feature.label()
+                ),
                 stderr: String::new(),
             }),
             Err(e) => Ok(CommandOutput {
@@ -110,7 +167,7 @@ mod tests {
     struct MockController {
         displays: Vec<NativeDisplay>,
         set_vcp_result: RefCell<Option<io::Result<()>>>,
-        set_vcp_calls: RefCell<Vec<(String, u8, u16)>>,
+        set_vcp_calls: RefCell<Vec<(String, NativeDdcFeature, u16)>>,
     }
 
     impl MockController {
@@ -139,17 +196,26 @@ mod tests {
                 .collect())
         }
 
-        fn set_vcp_feature(&self, display_id: &str, vcp_code: u8, value: u16) -> io::Result<()> {
+        fn set_vcp_feature(
+            &self,
+            display_id: &str,
+            feature: NativeDdcFeature,
+            value: u16,
+        ) -> io::Result<()> {
             self.set_vcp_calls
                 .borrow_mut()
-                .push((display_id.to_string(), vcp_code, value));
+                .push((display_id.to_string(), feature, value));
             self.set_vcp_result
                 .borrow_mut()
                 .take()
                 .expect("set_vcp_feature called more than once in this test")
         }
 
-        fn get_vcp_feature(&self, _display_id: &str, _vcp_code: u8) -> io::Result<VcpReading> {
+        fn get_vcp_feature(
+            &self,
+            _display_id: &str,
+            _feature: NativeDdcFeature,
+        ) -> io::Result<VcpReading> {
             unreachable!("NativeDdcBackend never reads; discovery has its own mock")
         }
     }
@@ -157,7 +223,7 @@ mod tests {
     fn native_action(display_id: &str, value: u16) -> BackendAction {
         BackendAction::NativeDdc {
             display_id: display_id.to_string(),
-            vcp_code: 0x60,
+            feature: NativeDdcFeature::InputSource,
             value,
         }
     }
@@ -174,7 +240,7 @@ mod tests {
         assert!(output.success);
         assert_eq!(
             backend.controller.set_vcp_calls.borrow().as_slice(),
-            [("DEL4176:0".to_string(), 0x60, 15)]
+            [("DEL4176:0".to_string(), NativeDdcFeature::InputSource, 15)]
         );
     }
 

@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from './api/bootstrap.js';
 import { saveConfigDraft, validateConfigDraft } from './api/config-draft.js';
 import { createApiClient } from './api/client.js';
+import { setNativeDdcControl } from './api/native-controls.js';
 import { probeInput } from './api/probe.js';
 import { configErrorFromUnknown } from './lib/config-error.js';
 import { defaultConfigDraftSkeleton, draftErrorsFromInvoke } from './lib/config-draft.js';
@@ -8,6 +9,7 @@ import {
   discoveryErrorMessage,
   formatDisplayLabel,
   formatInputSourceReading,
+  nativeDdcControlErrorMessage,
 } from './lib/discovery.js';
 import {
   formatProbeCountdownMessage,
@@ -47,6 +49,8 @@ import {
   renderConfigDraftSuccess,
   renderConfigErrorBanner,
   renderDiscoveryPanel,
+  renderNativeDdcControlDisplays,
+  renderNativeDdcControls,
   renderMonitors,
   renderPresetOptions,
   renderStatus,
@@ -114,6 +118,10 @@ const els = {
   presetIdPreview: document.getElementById('preset-id-preview'),
   draftSummaryPanel: document.getElementById('draft-summary-panel'),
   configDraftPanel: document.getElementById('config-draft-panel'),
+  nativeControlsDetectBtn: /** @type {HTMLButtonElement} */ (
+    document.getElementById('native-controls-detect-btn')
+  ),
+  nativeControlsPanel: document.getElementById('native-controls-panel'),
   statusPanel: document.getElementById('status-panel'),
   monitorList: document.getElementById('monitor-list'),
   loading: document.getElementById('loading'),
@@ -449,6 +457,99 @@ async function detectDisplays() {
   }
 }
 
+async function loadNativeControlDisplays() {
+  if (!client || !els.nativeControlsPanel) {
+    return;
+  }
+
+  els.nativeControlsDetectBtn.disabled = true;
+  els.nativeControlsPanel.replaceChildren();
+  const loading = document.createElement('p');
+  loading.className = 'meta-line muted';
+  loading.textContent = 'Finding displays...';
+  els.nativeControlsPanel.appendChild(loading);
+
+  try {
+    const data = await client.fetchDiscoveryDisplays();
+    renderNativeDdcControlDisplays(
+      els.nativeControlsPanel,
+      data,
+      (displayId, bodyEl, buttonEl) => {
+        void loadNativeControlsForDisplay(displayId, bodyEl, buttonEl);
+      },
+    );
+  } catch (err) {
+    els.nativeControlsPanel.replaceChildren();
+    const message = document.createElement('p');
+    message.className = 'meta-line muted';
+    message.textContent = `Could not find displays: ${errorMessage(err)}`;
+    els.nativeControlsPanel.appendChild(message);
+  } finally {
+    els.nativeControlsDetectBtn.disabled = false;
+  }
+}
+
+/**
+ * @param {string} displayId
+ * @param {HTMLElement} bodyEl
+ * @param {HTMLButtonElement} buttonEl
+ */
+async function loadNativeControlsForDisplay(displayId, bodyEl, buttonEl) {
+  if (!client) {
+    return;
+  }
+
+  buttonEl.disabled = true;
+  bodyEl.replaceChildren();
+  const loading = document.createElement('p');
+  loading.className = 'meta-line muted';
+  loading.textContent = 'Loading controls...';
+  bodyEl.appendChild(loading);
+
+  try {
+    const controls = await client.fetchNativeDdcControls(displayId);
+    renderNativeDdcControls(bodyEl, controls, {
+      canWrite: isTauriDesktop(),
+      onApply: (feature, value, statusEl, applyBtn) => {
+        void applyNativeDdcControl(displayId, feature, value, statusEl, applyBtn);
+      },
+    });
+  } catch (err) {
+    bodyEl.replaceChildren();
+    const message = document.createElement('p');
+    message.className = 'meta-line muted';
+    message.textContent = `Could not load controls: ${errorMessage(err)}`;
+    bodyEl.appendChild(message);
+  } finally {
+    buttonEl.disabled = false;
+  }
+}
+
+/**
+ * @param {string} displayId
+ * @param {import('./types.js').NativeDdcControlFeature} feature
+ * @param {number} value
+ * @param {HTMLElement} statusEl
+ * @param {HTMLButtonElement} buttonEl
+ */
+async function applyNativeDdcControl(displayId, feature, value, statusEl, buttonEl) {
+  buttonEl.disabled = true;
+  statusEl.className = 'native-control-status meta-line muted';
+  statusEl.textContent = 'Applying...';
+
+  try {
+    const result = await setNativeDdcControl(displayId, feature, value);
+    statusEl.className = 'native-control-status meta-line';
+    statusEl.textContent = `${result.feature} set to ${result.value}.`;
+    await loadEvents();
+  } catch (err) {
+    statusEl.className = 'native-control-status meta-line';
+    statusEl.textContent = `Apply failed: ${nativeDdcControlErrorMessage(err)}`;
+  } finally {
+    buttonEl.disabled = false;
+  }
+}
+
 function populateConfigDraftTextarea(json) {
   const textarea = getConfigDraftTextarea();
   if (textarea) {
@@ -690,6 +791,10 @@ async function main() {
 
   els.detectBtn.addEventListener('click', () => {
     void detectDisplays();
+  });
+
+  els.nativeControlsDetectBtn.addEventListener('click', () => {
+    void loadNativeControlDisplays();
   });
 
   els.presetLabelInput?.addEventListener('input', () => {
