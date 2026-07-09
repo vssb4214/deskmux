@@ -119,3 +119,16 @@ export function stepStateLabel(state) {
       return 'Pending';
   }
 }
+
+/**
+ * @param {SetupStepView[]} steps
+ * @returns {string | null}
+ */
+export function getActiveSetupStepId(steps) {
+  return (
+    steps.find((step) => step.state === 'current')?.id ??
+    steps.find((step) => step.state !== 'blocked')?.id ??
+    steps[0]?.id ??
+    null
+  );
+}

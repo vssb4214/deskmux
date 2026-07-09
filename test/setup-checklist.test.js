@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildSetupChecklist } from '../src/lib/setup-checklist.js';
+import { buildSetupChecklist, getActiveSetupStepId } from '../src/lib/setup-checklist.js';
 
 test('buildSetupChecklist marks name as current on a fresh session', () => {
   const steps = buildSetupChecklist({}, 'needsSetup', {
@@ -44,4 +44,27 @@ test('buildSetupChecklist marks restart current after save', () => {
 
   const restartStep = steps.find((step) => step.id === 'restart');
   assert.equal(restartStep?.state, 'current');
+});
+
+test('getActiveSetupStepId returns the current step first', () => {
+  const steps = buildSetupChecklist(
+    {
+      deviceName: 'Windows PC',
+      displays: [{ displayId: 'K@P:d0e5:0', label: 'Display 1' }],
+    },
+    'inProgress',
+    { isDesktop: true, nativeAvailable: true },
+  );
+
+  assert.equal(getActiveSetupStepId(steps), 'capture');
+});
+
+test('getActiveSetupStepId falls back to the first usable step', () => {
+  assert.equal(
+    getActiveSetupStepId([
+      { id: 'name', label: 'Name', state: 'complete', helper: '' },
+      { id: 'detect', label: 'Detect', state: 'blocked', helper: '' },
+    ]),
+    'name',
+  );
 });

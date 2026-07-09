@@ -95,6 +95,56 @@ export function renderSetupChecklist(steps, listEl) {
 }
 
 /**
+ * @param {import('../lib/setup-checklist.js').SetupStepView[]} steps
+ * @param {HTMLElement} container
+ * @param {string | null} activeStepId
+ * @param {(stepId: string) => void} onSelect
+ */
+export function renderSetupWizard(steps, container, activeStepId, onSelect) {
+  container.replaceChildren();
+
+  const nav = document.createElement('ol');
+  nav.className = 'setup-wizard-steps';
+
+  for (const [index, step] of steps.entries()) {
+    const item = document.createElement('li');
+    item.className = `setup-wizard-step setup-step-${step.state}`;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'setup-wizard-step-button';
+    button.dataset.stepId = step.id;
+    button.setAttribute('aria-current', step.id === activeStepId ? 'step' : 'false');
+
+    const number = document.createElement('span');
+    number.className = 'setup-wizard-step-number';
+    number.textContent = String(index + 1);
+
+    const label = document.createElement('span');
+    label.className = 'setup-wizard-step-label';
+    label.textContent = step.label;
+
+    const state = document.createElement('span');
+    state.className = `setup-wizard-step-state setup-step-badge-${step.state}`;
+    state.textContent =
+      step.state === 'complete'
+        ? 'Done'
+        : step.state === 'current'
+          ? 'Now'
+          : step.state === 'blocked'
+            ? 'Waiting'
+            : 'Next';
+
+    button.append(number, label, state);
+    button.addEventListener('click', () => onSelect(step.id));
+    item.appendChild(button);
+    nav.appendChild(item);
+  }
+
+  container.appendChild(nav);
+}
+
+/**
  * @param {HTMLElement} container
  * @param {import('../lib/setup-session.js').SetupSession} session
  * @param {{

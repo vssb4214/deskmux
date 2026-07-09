@@ -1,12 +1,12 @@
 # First-run setup experience
 
-**Status:** guided checklist shipped in the dashboard; full stepper wizard and tray entry still planned.
+**Status:** guided dashboard setup and stepper shell shipped; tray entry and full config-editor wizard still planned.
 
 Goal: someone new can go from zero to a working `deskmux.config.json` without hand-editing JSON.
 
 ## Using the dashboard checklist today
 
-When DeskMux starts without a valid config, open the desktop app and follow **Set up DeskMux** (expanded automatically). After configuration loads, setup tools collapse behind **Run setup again**.
+When DeskMux starts without a valid config, open the desktop app and follow **Set up DeskMux** (expanded automatically). The setup area now presents the same flow as a stepper so users can focus one stage at a time. After configuration loads, setup tools collapse behind **Run setup again**.
 
 1. **Name this computer** — readable label and derived config id (for example “Gaming PC” → `gaming_pc`).
 2. **Detect monitors** — uses `GET /native-ddc/displays` on Windows; name each display (for example “Left monitor”).
@@ -107,7 +107,7 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 | Discovery dashboard panel (read-only) | Done — "Monitor discovery" card |
 | Config draft validate/save (Tauri IPC) | Done — minimal "Config draft" dashboard card; full wizard still planned |
 | Guided setup checklist (dashboard) | Done — status bar + checklist + draft generation from captured readings; "Test this input" with revert-on-timeout |
-| Dashboard wizard UI | Not started — tray "Run setup wizard" and dedicated stepper still planned |
+| Dashboard wizard UI | Partial — dashboard stepper shell is live; tray "Run setup wizard" and full config-editor wizard still planned |
 
 ## Config write safety
 
@@ -130,7 +130,8 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 1. ~~Discovery HTTP API (reads) + probe-write (Tauri IPC)~~ — done (`GET /native-ddc/displays`, `GET .../input-source`, `probe_input` IPC command)
 2. ~~Config draft validate/save via Tauri IPC~~ — done, with a minimal dashboard "Config draft" card
 3. ~~Guided setup checklist in dashboard~~ — done
-4. Wizard shell / tray entry (stepper UI, vanilla JS)
+4. ~~Wizard shell~~ — done in the dashboard as a stepper over the existing setup flow
+5. Tray entry / full config-editor wizard
 
 ## Success criteria
 
