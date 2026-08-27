@@ -426,6 +426,61 @@ body {
   margin-top: 0.25rem;
 }
 
+.setup-wizard-steps {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.setup-wizard-step-button {
+  align-items: start;
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  color: #0f0f0f;
+  cursor: pointer;
+  display: grid;
+  gap: 0.35rem 0.5rem;
+  grid-template-columns: auto 1fr;
+  min-height: 88px;
+  padding: 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.setup-wizard-step-button[aria-current='step'] {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+}
+
+.setup-wizard-step-number {
+  align-items: center;
+  background: #e5e7eb;
+  border-radius: 999px;
+  color: #111827;
+  display: inline-flex;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  min-height: 1.75rem;
+  min-width: 1.75rem;
+}
+
+.setup-wizard-step-label {
+  font-weight: 700;
+}
+
+.setup-wizard-step-state {
+  color: #555;
+  font-size: 0.8rem;
+  font-weight: 700;
+  grid-column: 2;
+}
+
 .setup-checklist {
   list-style: none;
   margin: 0 0 1rem;
@@ -463,6 +518,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.setup-step-panel[hidden] {
+  display: none;
+}
+
+.setup-step-panel-active {
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
 }
 
 .setup-step-panel h3 {

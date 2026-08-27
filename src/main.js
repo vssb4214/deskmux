@@ -17,7 +17,7 @@ import {
   startProbeRevertTimer,
   PROBE_REVERT_DELAY_MS,
 } from './lib/probe.js';
-import { buildSetupChecklist } from './lib/setup-checklist.js';
+import { buildSetupChecklist, getActiveSetupStepId } from './lib/setup-checklist.js';
 import { buildConfigDraftFromSetupState } from './lib/setup-draft.js';
 import {
   defaultPresetLabel,
@@ -65,6 +65,7 @@ import {
   renderSetupDraftErrors,
   renderSetupStartHint,
   renderSetupStatusBar,
+  renderSetupWizard,
 } from './ui/setup.js';
 
 /** @typedef {import('./types.js').StatusResponse} StatusResponse */
@@ -81,6 +82,9 @@ let currentStatus = null;
 
 /** @type {SetupSession} */
 let setupSession = createSetupSession();
+
+/** @type {string | null} */
+let selectedSetupStepId = null;
 
 /** @type {boolean} */
 let nativeAvailable = false;
@@ -106,6 +110,7 @@ const els = {
   ),
   setupChecklistSummary: document.getElementById('setup-checklist-summary'),
   setupChecklistCard: document.getElementById('setup-checklist-card'),
+  setupWizard: document.getElementById('setup-wizard'),
   setupChecklist: document.getElementById('setup-checklist'),
   deviceNameInput: /** @type {HTMLInputElement} */ (document.getElementById('device-name-input')),
   deviceIdPreview: document.getElementById('device-id-preview'),
@@ -142,6 +147,17 @@ function scrollToChecklist() {
   els.setupChecklistDetails?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (els.setupChecklistDetails) {
     els.setupChecklistDetails.open = true;
+  }
+}
+
+/**
+ * @param {string | null} stepId
+ */
+function showSetupStep(stepId) {
+  for (const panel of document.querySelectorAll('.setup-step-panel')) {
+    const isActive = panel.id === `setup-step-${stepId}`;
+    panel.hidden = !isActive;
+    panel.classList.toggle('setup-step-panel-active', isActive);
   }
 }
 
@@ -239,7 +255,20 @@ function renderDashboardChrome() {
       isDesktop: isTauriDesktop(),
       nativeAvailable,
     });
+    const activeStepId =
+      selectedSetupStepId && steps.some((step) => step.id === selectedSetupStepId)
+        ? selectedSetupStepId
+        : getActiveSetupStepId(steps);
+    renderSetupWizard(steps, els.setupWizard, activeStepId, (stepId) => {
+      selectedSetupStepId = stepId;
+      showSetupStep(stepId);
+      document.getElementById(`setup-step-${stepId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    });
     renderSetupChecklist(steps, els.setupChecklist);
+    showSetupStep(activeStepId);
     renderCapturedReadings(els.capturedReadingsPanel, setupSession, {
       getMonitorName: getMonitorNameForDisplay,
       onInputLabelChange: (displayId, label) => {
@@ -779,6 +808,7 @@ async function main() {
 
   els.setupPrimaryCta.addEventListener('click', () => {
     setupSession = markSetupStarted(setupSession);
+    selectedSetupStepId = 'name';
     renderDashboardChrome();
     scrollToChecklist();
     els.deviceNameInput.focus();
