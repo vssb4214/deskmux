@@ -39,7 +39,7 @@ import {
   setReadingInputLabel,
 } from './lib/setup-session.js';
 import { deriveSetupStatus, getSetupChecklistPresentation } from './lib/setup-status.js';
-import { isTauriDesktop } from './lib/tauri.js';
+import { EVENT_OPEN_SETUP_WIZARD, isTauriDesktop, tauriListen } from './lib/tauri.js';
 import {
   renderApplyResult,
   renderBanner,
@@ -159,6 +159,15 @@ function showSetupStep(stepId) {
     panel.hidden = !isActive;
     panel.classList.toggle('setup-step-panel-active', isActive);
   }
+}
+
+/** Opens the guided setup wizard at the first step. */
+function openSetupWizard() {
+  setupSession = markSetupStarted(setupSession);
+  selectedSetupStepId = 'name';
+  renderDashboardChrome();
+  scrollToChecklist();
+  els.deviceNameInput.focus();
 }
 
 function setControlsDisabled(disabled) {
@@ -807,12 +816,15 @@ async function main() {
   initConfigDraftPanel();
 
   els.setupPrimaryCta.addEventListener('click', () => {
-    setupSession = markSetupStarted(setupSession);
-    selectedSetupStepId = 'name';
-    renderDashboardChrome();
-    scrollToChecklist();
-    els.deviceNameInput.focus();
+    openSetupWizard();
   });
+
+  const listenForTrayEvents = tauriListen();
+  if (listenForTrayEvents) {
+    void listenForTrayEvents(EVENT_OPEN_SETUP_WIZARD, () => {
+      openSetupWizard();
+    });
+  }
 
   els.deviceNameInput.addEventListener('input', () => {
     setupSession = setDeviceName(setupSession, els.deviceNameInput.value);

@@ -3,15 +3,19 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 use crate::api::events::ApplySource;
 use crate::api::{apply_preset_to_arc, AppState, ApplyPresetStateError};
 
 const MENU_SHOW: &str = "show";
+const MENU_SETUP: &str = "setup";
 const MENU_QUIT: &str = "quit";
 const MENU_APPLY_PREFIX: &str = "apply:";
+
+/// Emitted to the dashboard when the tray asks for the first-run setup wizard.
+pub const EVENT_OPEN_SETUP_WIZARD: &str = "deskmux://open-setup-wizard";
 
 pub fn init(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
     let icon = app.default_window_icon().cloned().ok_or_else(|| {
@@ -22,6 +26,7 @@ pub fn init(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
     })?;
 
     let show = MenuItem::with_id(app, MENU_SHOW, "Show DeskMux", true, None::<&str>)?;
+    let setup = MenuItem::with_id(app, MENU_SETUP, "Run setup wizard", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, MENU_QUIT, "Quit", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
 
@@ -37,7 +42,7 @@ pub fn init(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
         }
     }
 
-    let mut items: Vec<&dyn tauri::menu::IsMenuItem<_>> = vec![&show];
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<_>> = vec![&show, &setup];
     if !preset_items.is_empty() {
         items.push(&separator);
         for item in &preset_items {
@@ -57,6 +62,12 @@ pub fn init(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
             let id = event.id().as_ref();
             match id {
                 MENU_SHOW => show_main_window(app),
+                MENU_SETUP => {
+                    show_main_window(app);
+                    if let Err(err) = app.emit(EVENT_OPEN_SETUP_WIZARD, ()) {
+                        eprintln!("deskmux: failed to open setup wizard from tray: {err}");
+                    }
+                }
                 MENU_QUIT => app.exit(0),
                 id if id.starts_with(MENU_APPLY_PREFIX) => {
                     let preset = id.trim_start_matches(MENU_APPLY_PREFIX);
