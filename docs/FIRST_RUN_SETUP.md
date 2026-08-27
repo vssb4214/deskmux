@@ -1,6 +1,6 @@
 # First-run setup experience
 
-**Status:** guided dashboard setup and stepper shell shipped; tray entry and full config-editor wizard still planned.
+**Status:** guided dashboard setup, stepper shell, and the tray entry are shipped; the full config-editor wizard is still planned.
 
 Goal: someone new can go from zero to a working `deskmux.config.json` without hand-editing JSON.
 
@@ -107,7 +107,7 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 | Discovery dashboard panel (read-only) | Done — "Monitor discovery" card |
 | Config draft validate/save (Tauri IPC) | Done — minimal "Config draft" dashboard card; full wizard still planned |
 | Guided setup checklist (dashboard) | Done — status bar + checklist + draft generation from captured readings; "Test this input" with revert-on-timeout |
-| Dashboard wizard UI | Partial — dashboard stepper shell is live; tray "Run setup wizard" and full config-editor wizard still planned |
+| Dashboard wizard UI | Partial — dashboard stepper shell and the tray "Run setup wizard" entry are live; full config-editor wizard still planned |
 
 ## Config write safety
 
@@ -131,7 +131,8 @@ Show a clear warning when read succeeds but probe-write fails (monitor may not s
 2. ~~Config draft validate/save via Tauri IPC~~ — done, with a minimal dashboard "Config draft" card
 3. ~~Guided setup checklist in dashboard~~ — done
 4. ~~Wizard shell~~ — done in the dashboard as a stepper over the existing setup flow
-5. Tray entry / full config-editor wizard
+5. ~~Tray entry~~ — done; the tray "Run setup wizard" item shows the window and emits `deskmux://open-setup-wizard`, which opens the dashboard stepper at step 1
+6. Full config-editor wizard
 
 ## Success criteria
 
